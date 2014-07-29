@@ -107,73 +107,79 @@ def getEventFieldValue(field, event):
 	else:
 		return None
 
-lastAPIconnection = time.time()
+def main():
+	global lastAPIconnection
+	# Initialise Telnet connection and log in.
+	tn_cdr = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
+	tn_cdr.read_until("Asterisk Call Manager/1.1")
+	tn_cdr.write("Action: Login\nUsername: " + ASTERISK_CDR_USER + "\nSecret: " + ASTERISK_CDR_SECRET + "\n\n")
+
+	#Wait for fully booted
+	tn_cdr.read_until("Status: Fully Booted")
+	print "FULLY BOOTED, starting loop"
+	# Infinite loop for continuous AMI communication
+	while True:
+		data = tn_cdr.read_very_eager()
+		if len(data) > 0:
+			events = data.split("\r\n\r\n")
+			for event in events:
+				if str(getEventFieldValue('Event', event)) == 'Cdr':
+					print "CDR logged:"
+					if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
+						print "\tInbound"
+						salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+						if salesforceAccount:
+							salesforceUser = getUserId(str(getFullName(getEventFieldValue('Destination', event))))
+							if salesforceUser:
+								print "\tSRC: " + getEventFieldValue('Source', event)
+								print "\tSFA: " + salesforceAccount
+								print "\tDST: " + getEventFieldValue('Destination', event)
+								print "\tSFU: " + salesforceUser
+								duration = getEventFieldValue('BillableSeconds', event)
+								print "\tSEC: " + duration
+								print "\tLogging Call in SalesForce..."
+								createTask(salesforceAccount, int(duration), salesforceUser, "Inbound Call", None)
+								print "\tLogged."
+							else:
+								print "\tNo associated SalesForce user found."
+						else:
+							print "\tNo associated SalesForce account found."
+					elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
+						print "\tFrom Internal"
+						salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+						if salesforceAccount:
+							salesforceUser = getUserId(str(getFullName(getEventFieldValue('Source', event))))
+							if salesforceUser:
+								print "\tSRC: " + getEventFieldValue('Source', event)
+								print "\tSFA: " + salesforceAccount
+								print "\tDST: " + getEventFieldValue('Destination', event)
+								print "\tSFU: " + salesforceUser
+								duration = getEventFieldValue('BillableSeconds', event)
+								print "\tSEC: " + duration
+								print "\tLogging Call in SalesForce..."
+								createTask(salesforceAccount, int(duration), salesforceUser, "Outbound Call", None)
+								#print "\t<TASK LOGGING SKIPPED FOR OUTBOUND CALLS>"
+								print "\tLogged."
+							else:
+								print "\tNo associated SalesForce user found."
+						else:
+							print "\tNo associated SalesForce account found."
+					else:
+						print "\t" + str(getEventFieldValue('DestinationContext', event))
+		# if last API call to SF older than 9 minutes make new API call to avoid session timeout
+		if ((time.time()-(lastAPIconnection)) > (60*9)):
+			print "Making Dummy Call to avoid SF session timeout..."
+			sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
+			lastAPIconnection = time.time()
+			print "Call made."
+		time.sleep(5)
 
 ### START PROGRAM ###
+
+lastAPIconnection = time.time()
 
 # create logged in Salesforce Object
 sf = Salesforce(instance=INSTANCE, username=USERNAME, password=PASSWORD, security_token=TOKEN)
 
-# Initialise Telnet connection and log in.
-tn_cdr = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
-tn_cdr.read_until("Asterisk Call Manager/1.1")
-tn_cdr.write("Action: Login\nUsername: " + ASTERISK_CDR_USER + "\nSecret: " + ASTERISK_CDR_SECRET + "\n\n")
-
-#Wait for fully booted
-tn_cdr.read_until("Status: Fully Booted")
-print "FULLY BOOTED, starting loop"
-# Infinite loop for continuous AMI communication
-while True:
-	data = tn_cdr.read_very_eager()
-	if len(data) > 0:
-		events = data.split("\r\n\r\n")
-		for event in events:
-			if str(getEventFieldValue('Event', event)) == 'Cdr':
-				print "CDR logged:"
-				if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
-					print "\tInbound"
-					salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-					if salesforceAccount:
-						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Destination', event))))
-						if salesforceUser:
-							print "\tSRC: " + getEventFieldValue('Source', event)
-							print "\tSFA: " + salesforceAccount
-							print "\tDST: " + getEventFieldValue('Destination', event)
-							print "\tSFU: " + salesforceUser
-							duration = getEventFieldValue('BillableSeconds', event)
-							print "\tSEC: " + duration
-							print "\tLogging Call in SalesForce..."
-							createTask(salesforceAccount, int(duration), salesforceUser, "Inbound Call", None)
-							print "\tLogged."
-						else:
-							print "\tNo associated SalesForce user found."
-					else:
-						print "\tNo associated SalesForce account found."
-				elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
-					print "\tFrom Internal"
-					salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-					if salesforceAccount:
-						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Source', event))))
-						if salesforceUser:
-							print "\tSRC: " + getEventFieldValue('Source', event)
-							print "\tSFA: " + salesforceAccount
-							print "\tDST: " + getEventFieldValue('Destination', event)
-							print "\tSFU: " + salesforceUser
-							duration = getEventFieldValue('BillableSeconds', event)
-							print "\tSEC: " + duration
-							print "\tLogging Call in SalesForce..."
-							createTask(salesforceAccount, int(duration), salesforceUser, "Outbound Call", None)
-							print "\tLogged."
-						else:
-							print "\tNo associated SalesForce user found."
-					else:
-						print "\tNo associated SalesForce account found."
-				else:
-					print "\t" + str(getEventFieldValue('DestinationContext', event))
-	# if last API call to SF older than 9 minutes make new API call to avoid session timeout
-	if ((time.time()-lastAPIconnection) > (60*9)):
-		print "Making Dummy Call to avoid SF session timeout..."
-		sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
-		lastAPIconnection = time.time()
-		print "Call made."
-	time.sleep(5)
+if __name__ == "__main__":
+	main()
