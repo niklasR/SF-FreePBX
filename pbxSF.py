@@ -95,6 +95,10 @@ def createTask(accountId, duration, userId, contactId=None):
 	lastAPIconnection = time.time()
 
 def getEventFieldValue(field, event):
+	'''
+	Returns value of field from cdr event as reported by the AMI.
+	Event must be in the telnet format as string like "field: value\r\nfield:value\r\n"
+	'''
 	pattern = field + ": .+"
 	match = re.search(pattern, event)
 	if match:
@@ -149,7 +153,8 @@ while True:
 					print "\t" + str(getEventFieldValue('DestinationContext', event))
 	# if last API call to SF older than 9 minutes make new API call to avoid session timeout
 	if ((time.time()-lastAPIconnection) > (60*9)):
-		print "Making Dummy Call"
+		print "Making Dummy Call to avoid SF session timeout..."
 		sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
 		lastAPIconnection = time.time()
+		print "Call made."
 	time.sleep(5)
