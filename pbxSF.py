@@ -4,7 +4,7 @@ from ast_login import *
 from sf_login import *
 from simple_salesforce import Salesforce
 
-def getLastName(extension):
+def getFullName(extension):
 	'''
 	Returns the Last Name of the user registered to the extensin in FreePBX.
 	'''
@@ -24,27 +24,25 @@ def getLastName(extension):
 	if len(data) > 0:
 		cidline = re.search('/AMPUSER/' + extension + '/cidname.+', data).group(0)
 		words = re.findall('\w+', cidline)
-		lastname = words[len(words)-1] # last 'word' in cidline
+		fullname = " ".join(words[3:len(words)]) # last 'word' in cidline
 
 	# Close Telnet connection
 	tn_ami.write("Action: Logoff" + "\n\n")
 	tn_ami.close()
 
-	return lastname
+	return fullname
 
-
-def getUserId(lastname):
+def getUserId(fullName):
 	'''
 	Returns the salesforce ID of the user with the matching last name.
 	'''
-	query = "SELECT Id, Name FROM User WHERE LastName LIKE '" + lastname + "'"
+	query = "SELECT Id FROM User WHERE Name LIKE '" + fullName + "'"
 	result = sf.query_all(query)["records"]
 	lastAPIconnection = time.time()
 	if len(result) == 1:
 		return result[0]['Id'] # return Id of first result
 	else:
 		return None
-
 
 def getAccountId(phonenumber):
 	'''
@@ -97,10 +95,6 @@ def createTask(accountId, duration, userId, contactId=None):
 	lastAPIconnection = time.time()
 
 def getEventFieldValue(field, event):
-	'''
-	Returns value of field from cdr event as reported by the AMI.
-	Event must be in the telnet format as string like "field: value\r\nfield:value\r\n"
-	'''
 	pattern = field + ": .+"
 	match = re.search(pattern, event)
 	if match:
@@ -109,7 +103,7 @@ def getEventFieldValue(field, event):
 	else:
 		return None
 
-lastAPIconnection = time.time() # to avoid SF session timeout
+lastAPIconnection = time.time()
 
 ### START PROGRAM ###
 
@@ -121,7 +115,7 @@ tn_cdr = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
 tn_cdr.read_until("Asterisk Call Manager/1.1")
 tn_cdr.write("Action: Login\nUsername: " + ASTERISK_CDR_USER + "\nSecret: " + ASTERISK_CDR_SECRET + "\n\n")
 
-# Wait for fully booted
+#Wait for fully booted
 tn_cdr.read_until("Status: Fully Booted")
 print "FULLY BOOTED, starting loop"
 # Infinite loop for continuous AMI communication
@@ -136,7 +130,7 @@ while True:
 					print "\tInbound"
 					salesforceAccount = getAccountId(getEventFieldValue('Source', event))
 					if salesforceAccount:
-						salesforceUser = getUserId(str(getLastName(getEventFieldValue('Destination', event))))
+						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Destination', event))))
 						if salesforceUser:
 							print "\tSRC: " + getEventFieldValue('Source', event)
 							print "\tSFA: " + salesforceAccount
@@ -153,12 +147,9 @@ while True:
 						print "\tNo associated SalesForce account found."
 				else:
 					print "\t" + str(getEventFieldValue('DestinationContext', event))
-	
 	# if last API call to SF older than 9 minutes make new API call to avoid session timeout
 	if ((time.time()-lastAPIconnection) > (60*9)):
-		print "Making Dummy Call to avoid SF session timeout..."
+		print "Making Dummy Call"
 		sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
-		print "Call made"
 		lastAPIconnection = time.time()
-	
 	time.sleep(5)

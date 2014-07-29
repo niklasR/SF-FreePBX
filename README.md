@@ -11,8 +11,10 @@ SF-FreePBX runs in environments with:
  * SalesForce with API access enabled (Enterprise/Performance/Unlimited or Professional with Add-On)
 
 The machine running SF-FreePBX requires
-  * Python 2.7
-  * telnet access to the PBX server
+ * Python 2.7
+ * telnet access to the PBX server
+
+Names for the extensions need to be saved in the format `$FIRST_NAME $LAST_NAME` in FreePBX, and accordingly in SalesForce.
 
 ## Installation
 ### FreePBX
