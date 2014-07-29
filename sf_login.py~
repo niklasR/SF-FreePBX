@@ -1,0 +1,4 @@
+USERNAME = 'us@se.r'
+PASSWORD = 'password'
+TOKEN = 'T0K3N'
+INSTANCE = 'instance.salesforce.com'
