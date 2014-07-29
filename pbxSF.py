@@ -97,6 +97,10 @@ def createTask(accountId, duration, userId, contactId=None):
 	lastAPIconnection = time.time()
 
 def getEventFieldValue(field, event):
+	'''
+	Returns value of field from cdr event as reported by the AMI.
+	Event must be in the telnet format as string like "field: value\r\nfield:value\r\n"
+	'''
 	pattern = field + ": .+"
 	match = re.search(pattern, event)
 	if match:
@@ -105,7 +109,7 @@ def getEventFieldValue(field, event):
 	else:
 		return None
 
-lastAPIconnection = time.time()
+lastAPIconnection = time.time() # to avoid SF session timeout
 
 ### START PROGRAM ###
 
@@ -117,7 +121,7 @@ tn_cdr = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
 tn_cdr.read_until("Asterisk Call Manager/1.1")
 tn_cdr.write("Action: Login\nUsername: " + ASTERISK_CDR_USER + "\nSecret: " + ASTERISK_CDR_SECRET + "\n\n")
 
-#Wait for fully booted
+# Wait for fully booted
 tn_cdr.read_until("Status: Fully Booted")
 print "FULLY BOOTED, starting loop"
 # Infinite loop for continuous AMI communication
@@ -149,9 +153,12 @@ while True:
 						print "\tNo associated SalesForce account found."
 				else:
 					print "\t" + str(getEventFieldValue('DestinationContext', event))
+	
 	# if last API call to SF older than 9 minutes make new API call to avoid session timeout
 	if ((time.time()-lastAPIconnection) > (60*9)):
-		print "Making Dummy Call"
+		print "Making Dummy Call to avoid SF session timeout..."
 		sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
+		print "Call made"
 		lastAPIconnection = time.time()
+	
 	time.sleep(5)
