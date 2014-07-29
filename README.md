@@ -17,8 +17,8 @@ The machine running SF-FreePBX requires
 ## Installation
 ### FreePBX
 
-Two Asterisk Management Interface (*AMI*) users need to be configured on the PBX server. By default, the configuration file for this can be found at `/etc/asterisk/manager.conf`s.
-One user need to have write-permissions for 'command', and the other one read-permissions for 'cdr'. Make sure they are accessible by the machine you are planning to run SF-FreePBX on.
+Two Asterisk Management Interface (*AMI*) users need to be configured on the PBX server. By default, the configuration file for this can be found at `/etc/asterisk/manager.conf`.
+One user needsw to have write-permissions for 'command', and the other one read-permissions for 'cdr'. Make sure they are accessible by the machine you are planning to run SF-FreePBX on.
 
 SF-FreePBX is expecting the database keys for the cidnames in FreePBX to be formatted as `/AMPUSER/0000/cidname` where 0000 is the extension of the user.
 The last name of the user in the cidname needs to be the same as the user's last name in SalesForce.
