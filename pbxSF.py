@@ -76,7 +76,7 @@ def getAccountId(phonenumber):
 				return results[0]['AccountId']
 	return None
 
-def createTask(accountId, duration, userId, contactId=None):
+def createTask(accountId, duration, userId, subject='Call', contactId=None):
 	'''
 	Creates new, completed "Call" task in SalesForce to show up in the account's Activity History
 	'''
@@ -84,7 +84,7 @@ def createTask(accountId, duration, userId, contactId=None):
 		'Type':'Called',
 		'WhatId':accountId,
 		'OwnerID':userId,
-		'Subject':'Call',
+		'Subject':subject,
 		'Status':'Completed',
 		'WhoId':contactId,
 		'Description':'A call has been logged automagically.',
@@ -143,7 +143,26 @@ while True:
 							duration = getEventFieldValue('BillableSeconds', event)
 							print "\tSEC: " + duration
 							print "\tLogging Call in SalesForce..."
-							createTask(salesforceAccount, int(duration), salesforceUser, None)
+							createTask(salesforceAccount, int(duration), salesforceUser, "Inbound Call", None)
+							print "\tLogged."
+						else:
+							print "\tNo associated SalesForce user found."
+					else:
+						print "\tNo associated SalesForce account found."
+				elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
+					print "\tFrom Internal"
+					salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+					if salesforceAccount:
+						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Source', event))))
+						if salesforceUser:
+							print "\tSRC: " + getEventFieldValue('Source', event)
+							print "\tSFA: " + salesforceAccount
+							print "\tDST: " + getEventFieldValue('Destination', event)
+							print "\tSFU: " + salesforceUser
+							duration = getEventFieldValue('BillableSeconds', event)
+							print "\tSEC: " + duration
+							print "\tLogging Call in SalesForce..."
+							createTask(salesforceAccount, int(duration), salesforceUser, "Outbound Call", None)
 							print "\tLogged."
 						else:
 							print "\tNo associated SalesForce user found."
