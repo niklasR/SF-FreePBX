@@ -43,3 +43,7 @@ Your salesforce instance can be taken from the url when you are logged-in to . I
 ## Run
 
 Just run `python pbxSF.py` and it should connect to Asterisk and SalesForce. You should see `FULLY BOOTED, starting loop`. If not, make sure everything is configured correctly.
+
+##Security
+
+Bear in mind that the connection between SF-FreePBX and Asterisk is plaintext, so binding the AMI users to a specific machine, tunneling the traffic or runninf SF-FreePBX on the Asterisk-Sever is recommended.
