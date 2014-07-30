@@ -49,6 +49,10 @@ def getUserId(fullName):
 		return None
 
 def getNumberTerm(phonenumber):
+	'''
+	Returns wildcarded version of phonenumber.
+	Strips +/00 of the beginning, and the next two digits to account for country codes
+	'''
 	# Strip + or 00 off phone number
 	number = phonenumber.strip('+')
 	number = number.strip('00')
@@ -150,7 +154,7 @@ def createTask(accountId, duration, userId, subject='Call', contactId=None):
 def getEventFieldValue(field, event):
 	'''
 	Returns value of field from cdr event as reported by the AMI.
-	Event must be in the telnet format as string like "field: value\r\nfield:value\r\n"
+	Event must be in the telnet format as string like "field: value\\r\\nfield:value\\r\\n"
 	'''
 	pattern = field + ": .+"
 	match = re.search(pattern, event)
