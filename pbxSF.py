@@ -67,6 +67,34 @@ def getNumberOfContacts(phonenumber):
 	lastAPIconnection = time.time()
 	return len(results)
 
+def getNumberOfAccounts(phonenumber):
+	'''
+	Resturns the number of salesforce contacts associated with the phone number
+	'''
+	term = getNumberTerm(phonenumber)
+
+	results = sf.query_all("SELECT Id FROM Account WHERE Phone LIKE '" + term + "'")["records"]
+	lastAPIconnection = time.time()
+	if (len(results) > 0): # return ID of only match
+		return len(results)
+	else:
+		# Create empty set for couting unique accounts with that number
+		uniqueAccounts = set()
+		
+		# Search contacts for phones
+		results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "'")["records"]
+		lastAPIconnection = time.time()
+		for contact in results:
+			uniqueAccounts.add(contact['AccountId'])
+
+		#Search contact for mobile phones
+		results = sf.query_all("SELECT AccountId FROM Contact WHERE MobilePhone LIKE '" + term + "'")["records"]
+		lastAPIconnection = time.time()
+		for contact in results:
+			uniqueAccounts.add(contact['AccountId'])
+
+		return len(uniqueAccounts)
+
 def getAccountId(phonenumber):
 	'''
 	Resturns the Account ID of the salesforce account associated with the phone number
@@ -142,6 +170,14 @@ def main():
 					print "CDR logged:"
 					if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
 						print "\tInbound"
+						# check for number of contacts with SRC number and take action based on that:
+						#	0: Search how many accounts (inc. associated contacts) are associated with the number
+						#		0: no match -> no log
+						#		1: exact match -> log with account
+						#		2: no exact match -> don't log
+						#	1: Log call with that contact
+						#	2: goto 0
+
 						salesforceAccount = getAccountId(getEventFieldValue('Source', event))
 						if salesforceAccount:
 							salesforceUser = getUserId(str(getFullName(getEventFieldValue('Destination', event))))
