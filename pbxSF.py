@@ -44,19 +44,24 @@ def getUserId(fullName):
 	else:
 		return None
 
+def getNumberTerm(phonenumber):
+	# Strip + or 00 off phone number
+	number = phonenumber.strip('+')
+	number = number.strip('00')
+	# Strip first 2 digits of phone number in case the CID (caller provider specific) includes a country code
+	number = number[2:len(number)]
+
+	term = '%' # searchterm for salesfore SQOL
+	for digit in number:
+		term += (digit + "%")
+
+	return term
+
 def getAccountId(phonenumber):
 	'''
 	Resturns the Account ID of the salesforce account associated with the phone number
 	'''
-	# Strip + or 00 off phone number
-	phone = phonenumber.strip('+')
-	phone = phone.strip('00')
-	# Strip first 2 digits of phone number in case the CID (caller provider specific) includes a country code
-	phone = phone[2:len(phone)]
-
-	term = '%' # searchterm for salesfore SQOL
-	for digit in phone:
-		term += (digit + "%")
+	term = getNumberTerm(phonenumber)
 	#Query database for accounts
 	results = sf.query_all("SELECT Id FROM Account WHERE Phone LIKE '" + term + "'")["records"]
 	lastAPIconnection = time.time()
