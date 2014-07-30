@@ -22,7 +22,11 @@ def getFullName(extension):
 	
 	# Analyse data to find last name
 	if len(data) > 0:
-		cidline = re.search('/AMPUSER/' + extension + '/cidname.+', data).group(0)
+		match = re.search('/AMPUSER/' + extension + '/cidname.+', data)
+		if match:
+			cidline = match.group(0)
+		else:
+			return None
 		words = re.findall('\w+', cidline)
 		fullname = " ".join(words[3:len(words)]) # last 'word' in cidline
 
@@ -186,7 +190,9 @@ def main():
 					# Inbound calls to Extension
 					if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
 						print "\tInbound"
-						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Destination', event))))
+						localName = getFullName(getEventFieldValue('Destination', event))
+						if localName:
+							salesforceUser = getUserId(str(localName))
 						if salesforceUser:
 							# check for number of contacts with SRC number and take action based on that:
 							#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
@@ -207,7 +213,7 @@ def main():
 									createTask(salesforceAccount, int(duration), salesforceUser, "Inbound Call", None)
 									print "\tLogged."
 								elif(numberOfAccounts > 1):
-									print "\t" + str(numberOfAccounts) + "accounts found. No exact match possible." 
+									print "\t" + str(numberOfAccounts) + " accounts found. No exact match possible." 
 							else: # exact contact match
 								salesforceAccount = getAccountId(getEventFieldValue('Source', event))
 								salesforceContact = getContactId(getEventFieldValue('Source', event))
@@ -222,7 +228,9 @@ def main():
 					# Call from extension (Outbound and internal)
 					elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
 						print "\tFrom Internal"
-						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Source', event))))
+						localName = getFullName(getEventFieldValue('Source', event))
+						if localName:
+							salesforceUser = getUserId(str(localName))
 						if salesforceUser:
 							# check for number of contacts with DST number and take action based on that:
 							#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
@@ -243,7 +251,7 @@ def main():
 									createTask(salesforceAccount, int(duration), salesforceUser, "Outbound Call; Contact unknown", None)
 									print "\tLogged."
 								elif(numberOfAccounts > 1):
-									print "\t" + str(numberOfAccounts) + "accounts found. No exact match possible." 
+									print "\t" + str(numberOfAccounts) + " accounts found. No exact match possible." 
 							else: # exact contact match
 								salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
 								salesforceContact = getContactId(getEventFieldValue('Destination', event))
