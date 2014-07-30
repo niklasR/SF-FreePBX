@@ -57,6 +57,16 @@ def getNumberTerm(phonenumber):
 
 	return term
 
+def getNumberOfContacts(phonenumber):
+	'''
+	Resturns the number of salesforce contacts associated with the phone number
+	'''
+	term = getNumberTerm(phonenumber)
+
+	results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
+	lastAPIconnection = time.time()
+	return len(results)
+
 def getAccountId(phonenumber):
 	'''
 	Resturns the Account ID of the salesforce account associated with the phone number
