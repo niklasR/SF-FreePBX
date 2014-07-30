@@ -82,13 +82,7 @@ def getNumberOfAccounts(phonenumber):
 		uniqueAccounts = set()
 		
 		# Search contacts for phones
-		results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "'")["records"]
-		lastAPIconnection = time.time()
-		for contact in results:
-			uniqueAccounts.add(contact['AccountId'])
-
-		#Search contact for mobile phones
-		results = sf.query_all("SELECT AccountId FROM Contact WHERE MobilePhone LIKE '" + term + "'")["records"]
+		results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
 		lastAPIconnection = time.time()
 		for contact in results:
 			uniqueAccounts.add(contact['AccountId'])
@@ -117,6 +111,18 @@ def getAccountId(phonenumber):
 			lastAPIconnection = time.time()
 			if (len(results) == 1): # return ID of only match
 				return results[0]['AccountId']
+	return None
+
+def getContactId(phonenumber):
+	'''
+	Resturns the Contact ID of the salesforce contact associated with the phone number
+	'''
+	term = getNumberTerm(phonenumber)
+	#Query database for accounts
+	results = sf.query_all("SELECT Id FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
+	lastAPIconnection = time.time()
+	if (len(results) == 1): # return ID of only match
+		return results[0]['Id']
 	return None
 
 def createTask(accountId, duration, userId, subject='Call', contactId=None):
@@ -151,6 +157,14 @@ def getEventFieldValue(field, event):
 		return None
 
 def main():
+	'''
+	Main Function: Establishes connection to AMI and reads CDR events.
+	Every 5 seconds, it checks if an event has been detected, and if so it checks whether
+		- the call was inbound or outbound
+		- the user is registered with SalesForce
+		- the phone number is registered with SalesForce (account or contact)
+	If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information.
+	'''
 	global lastAPIconnection
 	# Initialise Telnet connection and log in.
 	tn_cdr = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
@@ -168,61 +182,88 @@ def main():
 			for event in events:
 				if str(getEventFieldValue('Event', event)) == 'Cdr':
 					print "CDR logged:"
+
+					# Inbound calls to Extension
 					if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
 						print "\tInbound"
-						# check for number of contacts with SRC number and take action based on that:
-						#	0: Search how many accounts (inc. associated contacts) are associated with the number
-						#		0: no match -> no log
-						#		1: exact match -> log with account
-						#		2: no exact match -> don't log
-						#	1: Log call with that contact
-						#	2: goto 0
+						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Destination', event))))
+						if salesforceUser:
+							# check for number of contacts with SRC number and take action based on that:
+							#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+							#		0: no match -> no log
+							#		1: exact match -> log with account
+							#		2: no exact match -> don't log
+							#	1: Log call with that contact
+							duration = getEventFieldValue('BillableSeconds', event)
+							numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
 
-						salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-						if salesforceAccount:
-							salesforceUser = getUserId(str(getFullName(getEventFieldValue('Destination', event))))
-							if salesforceUser:
-								print "\tSRC: " + getEventFieldValue('Source', event)
-								print "\tSFA: " + salesforceAccount
-								print "\tDST: " + getEventFieldValue('Destination', event)
-								print "\tSFU: " + salesforceUser
+							if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+								numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
+								if (numberOfAccounts == 0):
+									print "\tNo associated SalesForce account found."
+								elif(numberOfAccounts == 1):
+									salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+									print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
+									createTask(salesforceAccount, int(duration), salesforceUser, "Inbound Call", None)
+									print "\tLogged."
+								elif(numberOfAccounts > 1):
+									print "\t" + str(numberOfAccounts) + "accounts found. No exact match possible." 
+							else: # exact contact match
+								salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+								salesforceContact = getContactId(getEventFieldValue('Source', event))
 								duration = getEventFieldValue('BillableSeconds', event)
-								print "\tSEC: " + duration
-								print "\tLogging Call in SalesForce..."
-								createTask(salesforceAccount, int(duration), salesforceUser, "Inbound Call", None)
+								print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event)  + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
+								createTask(salesforceAccount, int(duration), salesforceUser, "Inbound Call", salesforceContact)
 								print "\tLogged."
-							else:
-								print "\tNo associated SalesForce user found."
+
 						else:
-							print "\tNo associated SalesForce account found."
+							print "\tNo associated SalesForce user found."
+
+					# Call from extension (Outbound and internal)
 					elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
 						print "\tFrom Internal"
-						salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-						if salesforceAccount:
-							salesforceUser = getUserId(str(getFullName(getEventFieldValue('Source', event))))
-							if salesforceUser:
-								print "\tSRC: " + getEventFieldValue('Source', event)
-								print "\tSFA: " + salesforceAccount
-								print "\tDST: " + getEventFieldValue('Destination', event)
-								print "\tSFU: " + salesforceUser
+						salesforceUser = getUserId(str(getFullName(getEventFieldValue('Source', event))))
+						if salesforceUser:
+							# check for number of contacts with DST number and take action based on that:
+							#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+							#		0: no match -> no log
+							#		1: exact match -> log with account
+							#		2: no exact match -> don't log
+							#	1: Log call with that contact
+							duration = getEventFieldValue('BillableSeconds', event)
+							numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
+
+							if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+								numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
+								if (numberOfAccounts == 0):
+									print "\tNo associated SalesForce account found."
+								elif(numberOfAccounts == 1):
+									salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+									print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
+									createTask(salesforceAccount, int(duration), salesforceUser, "Outbound Call; Contact unknown", None)
+									print "\tLogged."
+								elif(numberOfAccounts > 1):
+									print "\t" + str(numberOfAccounts) + "accounts found. No exact match possible." 
+							else: # exact contact match
+								salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+								salesforceContact = getContactId(getEventFieldValue('Destination', event))
 								duration = getEventFieldValue('BillableSeconds', event)
-								print "\tSEC: " + duration
-								print "\tLogging Call in SalesForce..."
-								createTask(salesforceAccount, int(duration), salesforceUser, "Outbound Call", None)
-								#print "\t<TASK LOGGING SKIPPED FOR OUTBOUND CALLS>"
+								print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
+								createTask(salesforceAccount, int(duration), salesforceUser, "Outbound Call", salesforceContact)
 								print "\tLogged."
-							else:
-								print "\tNo associated SalesForce user found."
+
 						else:
-							print "\tNo associated SalesForce account found."
+							print "\tNo associated SalesForce user found."
 					else:
 						print "\t" + str(getEventFieldValue('DestinationContext', event))
+
 		# if last API call to SF older than 9 minutes make new API call to avoid session timeout
 		if ((time.time()-(lastAPIconnection)) > (60*9)):
-			print "Making Dummy Call to avoid SF session timeout..."
+			print "Making dummy API call to avoid SF session timeout..."
 			sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
 			lastAPIconnection = time.time()
-			print "Call made."
+			print "API call made."
+		
 		time.sleep(5)
 
 ### START PROGRAM ###
