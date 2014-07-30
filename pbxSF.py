@@ -147,7 +147,8 @@ def createTask(accountId, duration, userId, subject='Call', contactId=None):
 		'Description':'A call has been logged automagically.',
 		'Status':'Completed',
 		'Priority':'Normal',
-		'Summary__c':'Duration: ' + str(datetime.timedelta(seconds=duration))
+		'Summary__c':'Duration: ' + str(datetime.timedelta(seconds=duration)),
+		'ActivityDate':time.strftime('%Y-%m-%d')
 		})
 	lastAPIconnection = time.time()
 
