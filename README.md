@@ -1,7 +1,7 @@
 SF-FreePBX
 ==========
 
-Log FreePBX calls in SalesForce
+Log FreePBX/Asterisk calls in SalesForce
 
 ## Requirements
 
