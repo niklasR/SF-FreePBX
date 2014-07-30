@@ -14,7 +14,7 @@ The machine running SF-FreePBX requires
  * Python 2.7
  * telnet access to the PBX server
 
-Names for the extensions need to be saved in the format `$FIRST_NAME $LAST_NAME` in FreePBX, and accordingly in SalesForce.
+Names for the extensions need to be saved in the format `$FirstName $LastName` in FreePBX, and accordingly in SalesForce.
 
 ## Installation
 ### FreePBX
