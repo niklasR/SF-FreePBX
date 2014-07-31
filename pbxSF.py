@@ -273,7 +273,7 @@ def main():
 								elif(numberOfAccounts > 1):
 									print "\t" + str(numberOfAccounts) + " accounts found. No exact match possible." 
 							else: # exact contact salesforceAccountc
-								match = getAccountId(getEventFieldValue('Source', event))
+								salesforceAccount = getAccountId(getEventFieldValue('Source', event))
 								salesforceContact = getContactId(getEventFieldValue('Source', event))
 								print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event)  + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + getEventFieldValue('BillableSeconds', event) + "\n\tLogging Call in SalesForce..."
 								createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
