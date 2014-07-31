@@ -263,7 +263,7 @@ def main():
 								elif(numberOfAccounts == 1):
 									salesforceAccount = getAccountId(getEventFieldValue('Source', event))
 									print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
-									createTask(salesforceAccount, int(duration), salesforceUser, "Call Inbound", None)
+									createTask(salesforceAccount, int(duration), salesforceUser, "Call Inbound; Contact unknown", None)
 									print "\tLogged."
 								elif(numberOfAccounts > 1):
 									print "\t" + str(numberOfAccounts) + " accounts found. No exact match possible." 
