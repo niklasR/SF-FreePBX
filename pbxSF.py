@@ -132,7 +132,7 @@ def getContactId(phonenumber):
 		return results[0]['Id']
 	return None
 
-def createTask(accountId, duration, userId, subject='Call', contactId=None):
+def createTask(accountId, summary, userId, subject='Call', contactId=None):
 	'''
 	Creates new, completed "Call" task in SalesForce to show up in the account's Activity History
 	'''
@@ -146,7 +146,7 @@ def createTask(accountId, duration, userId, subject='Call', contactId=None):
 		'Description':'A call has been logged automagically.',
 		'Status':'Completed',
 		'Priority':'Normal',
-		'Summary__c':'Duration: ' + str(datetime.timedelta(seconds=duration)),
+		'Summary__c':summary,
 		'ActivityDate':time.strftime('%Y-%m-%d')
 		})
 	lastAPIconnection = time.time()
@@ -208,6 +208,12 @@ def getSharedUser(extension):
 			return i
 	return None
 
+def makeSummary(event):
+	if getEventFieldValue('Disposition', event) == "NO ANSWER":
+		return "No Answer"
+	else:
+		return "Duration: " + str(datetime.timedelta(seconds=int(getEventFieldValue('BillableSeconds', event))))
+
 def main():
 	'''
 	Main Function: Establishes connection to AMI and reads CDR events.
@@ -253,7 +259,6 @@ def main():
 							#		1: exact match -> log with account
 							#		2: no exact match -> don't log
 							#	1: Log call with that contact
-							duration = getEventFieldValue('BillableSeconds', event)
 							numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
 
 							if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
@@ -262,17 +267,16 @@ def main():
 									print "\tNo associated SalesForce account found."
 								elif(numberOfAccounts == 1):
 									salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-									print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
-									createTask(salesforceAccount, int(duration), salesforceUser, "Call Inbound; Contact unknown", None)
+									print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + getEventFieldValue('BillableSeconds', event) + "\n\tLogging Call in SalesForce..."
+									createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
 									print "\tLogged."
 								elif(numberOfAccounts > 1):
 									print "\t" + str(numberOfAccounts) + " accounts found. No exact match possible." 
-							else: # exact contact match
-								salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+							else: # exact contact salesforceAccountc
+								match = getAccountId(getEventFieldValue('Source', event))
 								salesforceContact = getContactId(getEventFieldValue('Source', event))
-								duration = getEventFieldValue('BillableSeconds', event)
-								print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event)  + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
-								createTask(salesforceAccount, int(duration), salesforceUser, "Call Inbound", salesforceContact)
+								print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event)  + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + getEventFieldValue('BillableSeconds', event) + "\n\tLogging Call in SalesForce..."
+								createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
 								print "\tLogged."
 
 						else:
@@ -297,7 +301,6 @@ def main():
 								#		1: exact match -> log with account
 								#		2: no exact match -> don't log
 								#	1: Log call with that contact
-								duration = getEventFieldValue('BillableSeconds', event)
 								numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
 								if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
 									numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
@@ -305,17 +308,16 @@ def main():
 										print "\tNo associated SalesForce account found."
 									elif(numberOfAccounts == 1):
 										salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-										print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
-										createTask(salesforceAccount, int(duration), salesforceUser, "Call Outbound; Contact unknown", None)
+										print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + getEventFieldValue('BillableSeconds', event) + "\n\tLogging Call in SalesForce..."
+										createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
 										print "\tLogged."
 									elif(numberOfAccounts > 1):
 										print "\t" + str(numberOfAccounts) + " accounts found. No exact match possible." 
 								else: # exact contact match
 									salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
 									salesforceContact = getContactId(getEventFieldValue('Destination', event))
-									duration = getEventFieldValue('BillableSeconds', event)
-									print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + duration + "\n\tLogging Call in SalesForce..."
-									createTask(salesforceAccount, int(duration), salesforceUser, "Call Outbound", salesforceContact)
+									print "\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + getEventFieldValue('BillableSeconds', event) + "\n\tLogging Call in SalesForce..."
+									createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
 									print "\tLogged."
 
 							else:
