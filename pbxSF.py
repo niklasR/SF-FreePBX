@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 import sys, telnetlib, re, socket, time, datetime, pytz
-from ast_login import *
-from sf_login import *
+from pbxSF_config import *
 from simple_salesforce import Salesforce
 
 def getFullName(extension):
@@ -11,7 +10,7 @@ def getFullName(extension):
 	# Initialise Telnet connection and log in.
 	tn_ami = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
 	tn_ami.read_until("Asterisk Call Manager/1.1")
-	tn_ami.write("Action: Login\nUsername: " + ASTERISK_AMI_USER + "\nSecret: " + ASTERISK_AMI_SECRET + "\n\n")
+	tn_ami.write("Action: Login\nUsername: " + ASTERISK_CMD_USER + "\nSecret: " + ASTERISK_CMD_SECRET + "\n\n")
 
 	# Wait for fully booted
 	tn_ami.read_until("Status: Fully Booted")
@@ -165,12 +164,57 @@ def getEventFieldValue(field, event):
 	else:
 		return None
 
+def getQueueMembers(extension):
+	'''
+	Returns list of extensions on given queue in FreePBX.
+	'''
+	members = []
+	# Initialise Telnet connection and log in.
+	tn_ami = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
+	tn_ami.read_until("Asterisk Call Manager/1.1")
+	tn_ami.write("Action: Login\nUsername: " + ASTERISK_CMD_USER + "\nSecret: " + ASTERISK_CMD_SECRET + "\n\n")
+
+	# Wait for fully booted
+	tn_ami.read_until("Status: Fully Booted")
+
+	# Query for queue info in Asterisk
+	tn_ami.write("Action: Command\nCommand: queue show " + extension + "\n\n")
+	data = tn_ami.read_until("--END COMMAND--")
+	
+	# Analyse data to find last name
+	if len(data) > 0:
+		lines = data.split("\n")
+		for line in lines:
+			match = re.search('\(Local/\d{4}', line) # Assuming queue entries are like '*(Local/1339*' and only queue members are
+			if match:
+				members.append(match.group(0)[-4:])
+
+	# Close Telnet connection
+	tn_ami.write("Action: Logoff" + "\n\n")
+	tn_ami.close()
+
+	if len(members) > 0:
+		return members
+	else:
+		return None
+
+def getSharedUser(extension):
+	'''
+	Returns userId if extension is saved in config as a shared account.
+	This needs to be done manually!
+	'''
+	for i in SHARED_USERS:
+		if extension in SHARED_USERS[i]:
+			return i
+	return None
+
 def main():
 	'''
 	Main Function: Establishes connection to AMI and reads CDR events.
 	Every 5 seconds, it checks if an event has been detected, and if so it checks whether
 		- the call was inbound or outbound
-		- the user is registered with SalesForce
+		- the user is on a shared SalesForce account (support), and if not
+			- the user is registered with SalesForce
 		- the phone number is registered with SalesForce (account or contact)
 	If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information.
 	'''
@@ -191,13 +235,17 @@ def main():
 			for event in events:
 				if str(getEventFieldValue('Event', event)) == 'Cdr':
 					print "CDR logged:"
-
 					# Inbound calls to Extension
 					if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
 						print "\tInbound"
-						localName = getFullName(getEventFieldValue('Destination', event))
-						if localName:
-							salesforceUser = getUserId(str(localName))
+						# Check if extension is saved as shared User in config
+						salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
+						# If not saved, check if extension matches any SalesForce user
+						if not salesforceUser:
+							localName = getFullName(getEventFieldValue('Destination', event))
+							if localName:
+								salesforceUser = getUserId(str(localName))
+						# If SalesForce user matched via either of the above, proceed recordings.
 						if salesforceUser:
 							# check for number of contacts with SRC number and take action based on that:
 							#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
@@ -234,9 +282,14 @@ def main():
 					elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
 						print "\tFrom Internal"
 						if (len(str(getEventFieldValue('Destination', event))) > 4):
-							localName = getFullName(getEventFieldValue('Source', event))
-							if localName:
-								salesforceUser = getUserId(str(localName))
+							# Check if extension is saved as shared User in config
+							salesforceUser = getSharedUser(getEventFieldValue('Source', event))
+							# If not saved, check if extension matches any SalesForce user
+							if not salesforceUser:
+								localName = getFullName(getEventFieldValue('Source', event))
+								if localName:
+									salesforceUser = getUserId(str(localName))
+							# If SalesForce user matched via either of the above, proceed recordings.
 							if salesforceUser:
 								# check for number of contacts with DST number and take action based on that:
 								#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
@@ -246,7 +299,6 @@ def main():
 								#	1: Log call with that contact
 								duration = getEventFieldValue('BillableSeconds', event)
 								numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
-
 								if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
 									numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
 									if (numberOfAccounts == 0):
