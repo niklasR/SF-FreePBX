@@ -35,7 +35,7 @@ You need a user with the permissions to create tasks (i.e. log calls/activity) o
 ### SF-FreePBX
 
 SF-FreePBX requires Python and [Simple-Salesforce](https://github.com/neworganizing/simple-salesforce/).
-Simple Salesforce can be installed with `pip install simple-salesforce`.
+Simple Salesforce can be installed with pip: `pip install simple-salesforce`.
 
 ## Configuration
 
