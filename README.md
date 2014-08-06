@@ -80,55 +80,55 @@ Bear in mind that the connection between SF-FreePBX and Asterisk is plaintext, s
 ## Extensions
 If you would like to build on the code provided, here's an overview of the functions (despite the webserver)
 
-    `createTask(accountId, summary, userId, subject='Call', contactId=None)`
+    createTask(accountId, summary, userId, subject='Call', contactId=None)
         Creates new, completed "Call" task in SalesForce to show up in the account's Activity History
     
-    `getAccountId(phonenumber)`
+    getAccountId(phonenumber)
         Returns the Account ID of the salesforce account associated with the phone number
     
-    `getActiveUsers()`
+    getActiveUsers()
         Returns list of all active SalesForce Users
     
-    `getAllExtensions()`
+    getAllExtensions()
         Returns all extensions registered in FreePBX as a dictionary in the format {'ext': 'Name'}
     
-    `getContactId(phonenumber)`
+    getContactId(phonenumber)
         Returns the Contact ID of the salesforce contact associated with the phone number
     
-    `getEventFieldValue(field, event)`
+    getEventFieldValue(field, event)
         Returns value of field from cdr event as reported by the AMI.
         Event must be in the telnet format as string like "field: value\r\nfield:value\r\n"
     
-    `getNumberOfAccounts(phonenumber)`
+    getNumberOfAccounts(phonenumber)
         Returns the number of salesforce contacts associated with the phone number
     
-    `getNumberOfContacts(phonenumber)`
+    getNumberOfContacts(phonenumber)
         Returns the number of salesforce contacts associated with the phone number
     
-    `getNumberTerm(phonenumber)`
+    getNumberTerm(phonenumber)
         Returns wildcarded version of phonenumber.
         Strips +/00 of the beginning, and the next two digits to account for country codes
     
-    `getQueueMembers(extension)`
+    getQueueMembers(extension)
         Returns list of extensions on given queue in FreePBX.
     
-    `getSharedUser(extension)`
+    getSharedUser(extension)
         Returns userId if extension is saved in config as a shared account.
         This needs to be done manually!
     
-    `getUserId(fullName)`
+    getUserId(fullName)
         Returns the salesforce ID of the user with the matching name.
     
-    `getUsersNames(users)`
+    getUsersNames(users)
         Returns list of all active SalesForce Users
     
-    `isLoggingEnabled(extension)`
+    isLoggingEnabled(extension)
         Checks if logging is enabled for this extension.
     
-    `loadData(filename)`
+    loadData(filename)
         Load previously saved data. Returns data as saved; usually tuple like (obj0, obj1, ...).
     
-    `mainloop()`
+    mainloop()
         Main Function: Establishes connection to AMI and reads CDR events.
         Every 5 seconds, it checks if an event has been detected, and if so it checks whether
                 - the call was inbound or outbound
@@ -137,11 +137,11 @@ If you would like to build on the code provided, here's an overview of the funct
                 - the phone number is registered with SalesForce (account or contact)
         If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information, such as the duration and disposition, if configured.
     
-    `makeSummary(event)`
+    makeSummary(event)
         Returns string detailing duration and disposition of CDR event in 'event'.
     
-    `saveData(data, filename)`
+    saveData(data, filename)
         Save data in filename using pickle. Give data as tuple like (obj0, obj1, ...).
     
-    `sliceDict(d, s)`
+    sliceDict(d, s)
         Return dictionary d only with keys starting with s
