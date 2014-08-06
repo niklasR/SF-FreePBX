@@ -147,8 +147,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						<meta charset="UTF-8">
 						<meta name="viewport" content="width=device-width, initial-scale=1">
 						<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-						<meta http-equiv="cache-control" content="no-cache">
-						<link rel="icon" href="data:;base64,=">
 						<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
 						<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
 						<script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
@@ -165,9 +163,9 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						<div class="panel panel-default" style="height:450px;float:left;width:250px;margin:5px;">
 							<div class="panel-heading">Active Users<br /><small>Additionally to the Shared Users</small></div>
 							<div class="panel-body">
-							<form role="form" action="/" method="GET" >
+							<form role="form" action="/" autocomplete="off" method="GET" >
 							<div class="form-group">
-							<select class="form-control" autocomplete="off" name="whitelist" multiple style="height:300px;width=90%">"""
+							<select class="form-control" name="whitelist" multiple="multiple" style="height:300px;width=90%">"""
 				# save current data from SF and freePBX for access throughout processing of the request
 				extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
 				activeUsers = getActiveUsers()
@@ -194,9 +192,9 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 							<div class="panel-heading">Shared User: """ + activeUsers[sharedUser]['Username'] + """</div>
 							<div class="panel-body">
-							<form role="form" action="/" method="GET" >
+							<form role="form" action="/" autocomplete="off" method="GET" >
 							<div class="form-group">
-							<select class="form-control" autocomplete="off" name=""" + '"' + sharedUser + '" multiple style="height:300px;width=90%">'
+							<select class="form-control" name=""" + '"' + sharedUser + '" multiple="multiple" style="height:300px;width=90%">'
 					extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
 					for extension in extensions:
 						html += '<option value="' + extension[0]
@@ -206,7 +204,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							html += '">'
 						html += extension[0] + ": " + extension[1] + "</option>"
 					html += """
-								</select><br \>
+								</select><br />
 								<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
 								<a href="/?deleteUser=""" + sharedUser + """" class="btn btn-danger" style="margin:5px;" role="button">Delete User</a>
 								</div>
@@ -237,16 +235,16 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					html += '<a href="/?voicemail=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>voicemail</a>'
 				html += """<hr/><form role="form" action="/" method="GET" >
 							<div class="form-group">
-							<select class="form-control" autocomplete="off" name="addUser">"""
+							<select class="form-control" name="addUser">"""
 				usersForShared = sorted(activeUsers.iteritems(), key=lambda (k,v): v['Username']) # Sort users by Username
 				for user in usersForShared:
 					html += '<option value ="' + user[0] + '">' + user[1]['Username'] + "</option>"
 				html += """
 							</select>
-							<button type="submit" class="btn btn-success" style="margin:5px";>Add Shared User</button>
+							<button type="submit" class="btn btn-success" style="margin:5px;">Add Shared User</button>
 							</div>
 							</form>
-					</div></div></div>
+					</div></div>
 					</div>
 					</body>
 				</html>
@@ -559,7 +557,7 @@ def mainloop():
 	Every 5 seconds, it checks if an event has been detected, and if so it checks whether
 		- the call was inbound or outbound
 		- the user is on a shared SalesForce account, and if not
-			- the user is registered with SalesForce
+			- the user's extension is whitelisted (marked 'active' in the webinterface)
 		- the phone number is registered with SalesForce (account or contact)
 	If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information, such as the duration and disposition, if configured.
 	'''
