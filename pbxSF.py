@@ -612,7 +612,13 @@ def mainloop():
 									else: # exact contact salesforceAccountc
 										salesforceAccount = getAccountId(getEventFieldValue('Source', event))
 										salesforceContact = getContactId(getEventFieldValue('Source', event))
-										logging.info("\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tSFC: " + salesforceContact + "\n\tDST: " + getEventFieldValue('Destination', event)  + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + getEventFieldValue('BillableSeconds', event) + "\n\tLogging Call in SalesForce...")
+										logging.info("\tSRC: " + getEventFieldValue('Source', event))
+										logging.info("\tSFA: " + salesforceAccount)
+										logging.info("\tSFC: " + salesforceContact)
+										logging.info("\tDST: " + getEventFieldValue('Destination', event))
+										logging.info("\tSFU: " + salesforceUser)
+										logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+										logging.info("\tLogging Call in SalesForce...")
 										createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
 
 								else:
@@ -651,7 +657,12 @@ def mainloop():
 												logging.info("\tNo associated SalesForce account found.")
 											elif(numberOfAccounts == 1):
 												salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-												logging.info("\tSRC: " + getEventFieldValue('Source', event) + "\n\tSFA: " + salesforceAccount + "\n\tDST: " + getEventFieldValue('Destination', event) + "\n\tSFU: " + salesforceUser + "\n\tSEC: " + getEventFieldValue('BillableSeconds', event) + "\n\tLogging Call in SalesForce...")
+												logging.info("\tSRC: " + getEventFieldValue('Source', event))
+												logging.info("\tSFA: " + salesforceAccount)
+												logging.info("\tDST: " + getEventFieldValue('Destination', event))
+												logging.info("\tSFU: " + salesforceUser)
+												logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+												logging.info("\tLogging Call in SalesForce...")
 												createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
 												logging.info("\tLogged.")
 											elif(numberOfAccounts > 1):
