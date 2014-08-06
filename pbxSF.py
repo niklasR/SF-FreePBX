@@ -371,7 +371,7 @@ def getUserId(fullName):
 def getNumberTerm(phonenumber):
 	'''
 	Returns wildcarded version of phonenumber.
-	Strips +/00 of the beginning, and the next two digits to account for country codes
+	Strips +/00 off of the beginning, and the next two digits to account for country codes
 	'''
 	# Strip + or 00 off phone number
 	number = phonenumber.strip('+')

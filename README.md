@@ -12,9 +12,9 @@ SF-FreePBX runs in environments with:
 
 The machine running SF-FreePBX requires
  * Python 2.7
- * telnet access to the PBX server
+ * telnet access to the PBX server on the port defined in the AMI configuration in Asterisk (default is 5038)
 
-Names for the extensions need to be saved in the format `$FirstName $LastName` in FreePBX, and accordingly in SalesForce.
+Names for the extensions need to be saved in the format `FirstName LastName` in FreePBX, and accordingly in SalesForce.
 
 ## Installation
 ### FreePBX
@@ -63,7 +63,7 @@ Please note that shared users are independent of the `Active Extensions` - wheth
 
 #### Enable/Disable logging
 
-If logging is not enabled, the program will do all steps as usual, apart from actually recording the call in SalesForce. This can be useful to determine whether the program is running correctly without actually writing to the SalesForce database
+If logging is not enabled, the program will do all steps as usual, apart from actually recording the call in SalesForce. This can be useful to determine whether the program is running correctly without actually writing anything to the SalesForce database
 
 #### Enable/Disable logging of unanswered calls
 
@@ -107,7 +107,7 @@ If you would like to build on the code provided, here's an overview of the funct
     
     getNumberTerm(phonenumber)
         Returns wildcarded version of phonenumber.
-        Strips +/00 of the beginning, and the next two digits to account for country codes
+        Strips +/00 off of the beginning, and the next two digits to account for country codes
     
     getQueueMembers(extension)
         Returns list of extensions on given queue in FreePBX.
@@ -133,7 +133,7 @@ If you would like to build on the code provided, here's an overview of the funct
         Every 5 seconds, it checks if an event has been detected, and if so it checks whether
                 - the call was inbound or outbound
                 - the user is on a shared SalesForce account, and if not
-                        - the user is registered with SalesForce
+                    - the user's extension is whitelisted (marked 'active' in the webinterface)
                 - the phone number is registered with SalesForce (account or contact)
         If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information, such as the duration and disposition, if configured.
     
