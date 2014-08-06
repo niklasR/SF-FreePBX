@@ -4,7 +4,6 @@ from pbxSF_config import *
 from simple_salesforce import Salesforce
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
-
 class server(threading.Thread):
     def __init__(self,):
         threading.Thread.__init__(self)
@@ -89,7 +88,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				elif qs['file'][0] == 'load':
 					data = loadData(FILENAME)
 					if data:
-						if len(data) == 4:
+						if len(data) == 5:
 							sharedUsers = data[0]
 							whitelistLogging = data[1]
 							unansweredEnabled = data[2]
