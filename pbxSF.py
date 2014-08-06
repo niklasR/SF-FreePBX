@@ -45,6 +45,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global sharedUsers
 		global unansweredEnabled
 		global loggingEnabled
+		global voicemailEnabled
 
 		# Time request
 		starttime = time.time()
@@ -84,7 +85,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Data Save/Load
 			if 'file' in qs:
 				if qs['file'][0] == 'save':
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled), FILENAME)
+					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled), FILENAME)
 				elif qs['file'][0] == 'load':
 					data = loadData(FILENAME)
 					if data:
@@ -93,6 +94,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							whitelistLogging = data[1]
 							unansweredEnabled = data[2]
 							loggingEnabled = data[3]
+							voicemailEnabled = data[4]
 
 			# Enable/Disable logging of unanswered calls
 			if 'unanswered' in qs:
@@ -100,6 +102,13 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					unansweredEnabled = False
 				elif qs['unanswered'][0] == 'enable':
 					unansweredEnabled = True
+
+			# Enable/Disable logging of calls gone to voicemail
+			if 'voicemail' in qs:
+				if qs['voicemail'][0] == 'disable':
+					voicemailEnabled = False
+				elif qs['voicemail'][0] == 'enable':
+					voicemailEnabled = True
 
 			# Enable/Disable logging
 			if 'loggingEnabled' in qs:
@@ -208,7 +217,13 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
 				html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 							<div class="panel-heading">Options<br/>&nbsp;</div>
-							<div class="panel-body" style="text-align:center">"""
+							<div class="panel-body" style="text-align:center">
+							<a href="/?file=save" class="btn btn-warning" style="margin:5px" role="button">Save</a>"""
+				# Only activate Load Button if there is data to load...
+				if loadData(FILENAME):
+					html += '<a href="/?file=load" class="btn btn-warning" style="margin:5px" role="button">Load</a>'
+				else:
+					html += '<button type="button" class="btn btn-warning" disabled="disabled" style="margin:5px" role="button">Load</button>'
 				if loggingEnabled:
 					html += '<a href="/?loggingEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging</a>'
 				else:
@@ -217,6 +232,10 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>unanswered calls</a>'
 				else:
 					html += '<a href="/?unanswered=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>unanswered calls</a>'
+				if voicemailEnabled:
+					html += '<a href="/?voicemail=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>voicemail</a>'
+				else:
+					html += '<a href="/?voicemail=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>voicemail</a>'
 				html += """<hr/><form role="form" action="/" method="GET" >
 							<div class="form-group">
 							<select class="form-control" autocomplete="off" name="addUser">"""
@@ -228,14 +247,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							<button type="submit" class="btn btn-success" style="margin:5px";>Add Shared User</button>
 							</div>
 							</form>
-							<hr/>
-							<a href="/?file=save" class="btn btn-warning" style="margin:5px;" role="button">Save Config</a>"""
-				# Only activate Load Button if there is data to load...
-				if loadData(FILENAME):
-					html += '<a href="/?file=load" class="btn btn-warning" style="margin:5px;" role="button">Load Config</a>'
-				else:
-					html += '<button type="button" class="btn btn-warning" disabled="disabled" style="margin:5px;" role="button">Load Config</button>'
-				html += """	</div></div>
+					</div></div></div>
 					</div>
 					</body>
 				</html>
@@ -574,55 +586,58 @@ def mainloop():
 						logging.info("\tInbound")
 						if isLoggingEnabled(getEventFieldValue('Destination', event)):
 							# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
-							if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled): 
+							if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
+								if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailEnabled):
 
-								# Check if extension is saved as shared User in config
-								salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
-								# If not saved, check if extension matches any SalesForce user
-								if not salesforceUser:
-									localName = getAllExtensions()[getEventFieldValue('Destination', event)]
-									if localName:
-										salesforceUser = getUserId(str(localName))
-								# If SalesForce user matched via either of the above, proceed recordings.
-								if salesforceUser:
-									# check for number of contacts with SRC number and take action based on that:
-									#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
-									#		0: no match -> no log
-									#		1: exact match -> log with account
-									#		2: no exact match -> don't log
-									#	1: Log call with that contact
-									numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
+									# Check if extension is saved as shared User in config
+									salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
+									# If not saved, check if extension matches any SalesForce user
+									if not salesforceUser:
+										localName = getAllExtensions()[getEventFieldValue('Destination', event)]
+										if localName:
+											salesforceUser = getUserId(str(localName))
+									# If SalesForce user matched via either of the above, proceed recordings.
+									if salesforceUser:
+										# check for number of contacts with SRC number and take action based on that:
+										#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+										#		0: no match -> no log
+										#		1: exact match -> log with account
+										#		2: no exact match -> don't log
+										#	1: Log call with that contact
+										numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
 
-									if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-										numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
-										if (numberOfAccounts == 0):
-											logging.info("\tNo associated SalesForce account found.")
-										elif(numberOfAccounts == 1):
+										if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+											numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
+											if (numberOfAccounts == 0):
+												logging.info("\tNo associated SalesForce account found.")
+											elif(numberOfAccounts == 1):
+												salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+												logging.info("\tSRC: " + getEventFieldValue('Source', event))
+												logging.info("\tSFA: " + salesforceAccount)
+												logging.info("\tDST: " + getEventFieldValue('Destination', event))
+												logging.info("\tSFU: " + salesforceUser)
+												logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+												logging.info("\tLogging Call in SalesForce...")
+												createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
+												logging.info("\tLogged.")
+											elif(numberOfAccounts > 1):
+												logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+										else: # exact contact salesforceAccountc
 											salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+											salesforceContact = getContactId(getEventFieldValue('Source', event))
 											logging.info("\tSRC: " + getEventFieldValue('Source', event))
 											logging.info("\tSFA: " + salesforceAccount)
+											logging.info("\tSFC: " + salesforceContact)
 											logging.info("\tDST: " + getEventFieldValue('Destination', event))
 											logging.info("\tSFU: " + salesforceUser)
 											logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 											logging.info("\tLogging Call in SalesForce...")
-											createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
-											logging.info("\tLogged.")
-										elif(numberOfAccounts > 1):
-											logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-									else: # exact contact salesforceAccountc
-										salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-										salesforceContact = getContactId(getEventFieldValue('Source', event))
-										logging.info("\tSRC: " + getEventFieldValue('Source', event))
-										logging.info("\tSFA: " + salesforceAccount)
-										logging.info("\tSFC: " + salesforceContact)
-										logging.info("\tDST: " + getEventFieldValue('Destination', event))
-										logging.info("\tSFU: " + salesforceUser)
-										logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-										logging.info("\tLogging Call in SalesForce...")
-										createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
+											createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
 
+									else:
+										logging.info("\tNo associated SalesForce user found.")
 								else:
-									logging.info("\tNo associated SalesForce user found.")
+									logging.info("\tCalls to voicemail not logged.")
 							else:
 								logging.info("\tUnanswered calls not logged.")
 						else:
@@ -633,7 +648,7 @@ def mainloop():
 						logging.info("\tFrom Internal")
 						if isLoggingEnabled(getEventFieldValue('Source', event)):
 							# check whether the call has NOT been answered and if so, whether the extension has logging of unsanwered calls enabled
-							if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled): 
+							if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
 								if (len(str(getEventFieldValue('Destination', event))) > 4):
 									# Check if extension is saved as shared User in config
 									salesforceUser = getSharedUser(getEventFieldValue('Source', event))
@@ -711,11 +726,13 @@ try:
 	whitelistLogging = data[1]
 	unansweredEnabled = data[2]
 	loggingEnabled = data[3]
+	voicemailEnabled = data[4]
 except:
 	sharedUsers = {}
 	whitelistLogging = ()
 	unansweredEnabled = True
 	loggingEnabled = False
+	voicemailEnabled = True
 
 # create logged in Salesforce Object
 sf = Salesforce(instance=SF_INSTANCE, username=SF_USERNAME, password=SF_PASSWORD, security_token=SF_TOKEN)
