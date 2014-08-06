@@ -400,9 +400,9 @@ def getNumberOfAccounts(phonenumber):
 
 	results = sf.query_all("SELECT Id FROM Account WHERE Phone LIKE '" + term + "'")["records"]
 	lastAPIconnection = time.time()
-	if (len(results) > 0): # return ID of only match
+	if (len(results) > 0):
 		return len(results)
-	else:
+	else: # search contacts for phone numbers and count associated accounts
 		# Create empty set for couting unique accounts with that number
 		uniqueAccounts = set()
 		
