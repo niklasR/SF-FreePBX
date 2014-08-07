@@ -44,7 +44,12 @@ Your salesforce instance can be taken from the url when you are logged-in to . I
 
 ## Run
 
-Just run `python pbxSF.py` and it should connect to Asterisk and SalesForce. Take a look at the log to see if everything is running correctly. You should be able to configure extensions using the webinterface at `http://localhost:PORT` (the port is specified in the config).
+Just run `python pbxSF.py` and it should connect to Asterisk and SalesForce.
+
+If you are not loading a previously saved config, you will be asked to specify a log-in for the webinterface the first time you open it.
+
+To specify your own port, run it with commandline argument `-p`, and to load a previously saved config, you can use `-f filename -s passphrase`.
+Take a look at the log to see if everything is running correctly. You should be able to configure extensions using the webinterface at `http://localhost:PORT` (the port is specified in the config).
 
 ## Configuration
 
@@ -72,6 +77,7 @@ This allows you to stop logging incoming calls that have not been answered.
 #### Save/Load
 Save the current config permanently to the disk. This will be retained if the program is exited and restarted.
 Use the Load function to load a previously saved config. All changes made since the last Save will be overridden.
+Please note that the configs are encrypted by default - so please make sure you can remember the Passphrase!
 
 ##Security
 

@@ -1,20 +1,22 @@
 #! /usr/bin/env python
-import sys, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging
+import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging
 from pbxSF_config import *
 from simple_salesforce import Salesforce
+from encryptedpickle import encryptedpickle
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
 class server(threading.Thread):
     def __init__(self,):
         threading.Thread.__init__(self)
     def run(self):
-        logging.info("SERVER started on port " + str(PORT))
+        logging.info("SERVER started on port " + str(port))
         Handler = MyHandler
-        httpd = SocketServer.TCPServer(("", PORT), Handler)
+        httpd = SocketServer.TCPServer(("", port), Handler)
         httpd.serve_forever()
         logging.info("Exiting SERVER")
         
 class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
+
 	def do_HEAD(self):
 		"""
 		Send HTML Header.
@@ -24,13 +26,13 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
 
-	def do_AUTHHEAD(self):
+	def do_AUTHHEAD(self, realm):
 		"""
 		Request HTTP Authentication from client.
 		"""
 		logging.info("send header")
 		self.send_response(401)
-		self.send_header('WWW-Authenticate', 'Basic realm=\"pbxSF Login\"')
+		self.send_header('WWW-Authenticate', 'Basic realm=\"' + realm + '\"')
 		self.send_header('Content-type', 'text/html')
 		self.end_headers()
 
@@ -39,22 +41,50 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		Serve regular requests.
 		"""
 		# Load global names
-		global AUTH_KEY
+		global authKey
 		global whitelistLogging
 		global sharedUsers
 		global unansweredEnabled
 		global loggingEnabled
 		global voicemailEnabled
+		global showMessage
 
 		# Time request
 		starttime = time.time()
-		# Present frontpage with user authentication. 
-		if self.headers.getheader('Authorization') == None:
-			self.do_AUTHHEAD()
-			self.wfile.write('no auth header received')
-			pass
-		elif self.headers.getheader('Authorization') == 'Basic '+ AUTH_KEY:
+		authorised = False
 
+		# Present frontpage with user authentication, if key set in config; otherwise ask for key!
+		try:
+			if authKey:
+				logging.info("HTTP authentication requested.")
+				if self.headers.getheader('Authorization') == None:
+					self.do_AUTHHEAD(realm="pbxSF login")
+					self.wfile.write('no auth header received')
+					pass
+				elif self.headers.getheader('Authorization') == 'Basic ' + authKey:
+					logging.info("HTTP Authorised.")
+					authorised = True
+				else:
+					# If not authenticated
+		 			self.do_AUTHHEAD(realm="pbxSF login")
+					self.wfile.write(self.headers.getheader('Authorization'))
+					self.wfile.write(' not authenticated')
+					pass
+		except:
+			logging.info("Request user to set HTTP auth details.")
+			if not self.headers.getheader('Authorization'):
+				self.do_AUTHHEAD(realm="First time run: Please enter the log in you would like to use for the webinterface.")
+			else:
+				if self.headers.getheader('Authorization') == None:
+					self.wfile.write('no auth header received')
+				else:
+					authKey = self.headers.getheader('Authorization').strip('Basic ')
+					showMessage.add("Your log-in details have been saved!")
+					logging.info("HTTP auth details set.")
+					logging.info("HTTP Authorised.")
+					authorised = True
+
+		if authorised == True:
 			# Analyse HTTP GET content
 			qs = {}
 			path = self.path
@@ -67,9 +97,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			dict_print = ""
 			for key, value in qs.items():
 				dict_print += "{} : {}".format(key, value) # for debug/log
-				dict_print += "\n"
-
-			logging.info("" + dict_print)
+				dict_print += " | "
 
 			# Update active extensions
 			if 'whitelist' in qs:
@@ -80,20 +108,34 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				for userId in qs['deleteUser']:
 					if userId in sharedUsers:
 						del sharedUsers[userId]
+						showMessage.add("Shared User deleted.")
 
-			# Data Save/Load
-			if 'file' in qs:
-				if qs['file'][0] == 'save':
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled), FILENAME)
-				elif qs['file'][0] == 'load':
-					data = loadData(FILENAME)
-					if data:
-						if len(data) == 5:
-							sharedUsers = data[0]
-							whitelistLogging = data[1]
-							unansweredEnabled = data[2]
-							loggingEnabled = data[3]
-							voicemailEnabled = data[4]
+			# Save config (encrypted)
+			if ('savename' in qs) and ('savesecret' in qs):
+				if len(qs['savesecret'][0]) >= 8:
+					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
+					logging.info("Config saved as " + qs['savename'][0] + ".epk")
+					showMessage.add("Config saved as '" + qs['savename'][0] + "'.")
+				else:
+					showMessage.add("Passphrase too short - needs to be at least 8 characters")
+					logging.warning("Passphrase too short - needs to be at least 8 characters")
+
+			# Load config (encrypted)
+			if ('loadname' in qs) and ('loadsecret' in qs):
+				data = loadData(qs['loadname'][0] + ".epk", qs['loadsecret'][0]*4)
+				if data:
+					if len(data) == 6:
+						sharedUsers = data[0]
+						whitelistLogging = data[1]
+						unansweredEnabled = data[2]
+						loggingEnabled = data[3]
+						voicemailEnabled = data[4]
+						authKey = data[5]
+						showMessage.add("Config loaded succesfully.")
+					else:
+						showMessage.add("Config could not be loaded: Format incompatible.")
+				else:
+					showMessage.add("Config could not be loaded: File not found or passphrase wrong.")
 
 			# Enable/Disable logging of unanswered calls
 			if 'unanswered' in qs:
@@ -121,6 +163,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				for userId in qs['addUser']:
 					if not userId in sharedUsers: # only if user not added as shared user, yet
 						sharedUsers[userId] = []
+						showMessage.add("Shared User added.")
 
 			# All user IDs in SalesForce begin with 005, so if there is a key beginning with 005, we assume it's a sharedUser and update the entry accordingly.
 			sharedUsersGet = sliceDict(qs, '005')
@@ -157,8 +200,10 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					<body style="width:95%;margin-left:auto;margin-right:auto;">
 					<div class="page-header">
 						<h1>PBXsf <small>Logging FreePBX calls in SalesForce</small></h1>
-					</div>
-					<div style="width:80%;margin-left:auto;margin-right:auto;">
+					</div>"""
+				for i in range(len(showMessage)):
+					html += '<div class="alert alert-info" role="alert">' + str(showMessage.pop()) + '</div>'
+				html += """<div style="width:80%;margin-left:auto;margin-right:auto;">
 						<!--White List-->
 						<div class="panel panel-default" style="height:450px;float:left;width:250px;margin:5px;">
 							<div class="panel-heading">Active Users<br /><small>Additionally to the Shared Users</small></div>
@@ -214,17 +259,12 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
 				html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 							<div class="panel-heading">Options<br/>&nbsp;</div>
-							<div class="panel-body" style="text-align:center">
-							<a href="/?file=save" class="btn btn-warning" style="margin:5px" role="button">Save</a>"""
-				# Only activate Load Button if there is data to load...
-				if loadData(FILENAME):
-					html += '<a href="/?file=load" class="btn btn-warning" style="margin:5px" role="button">Load</a>'
-				else:
-					html += '<button type="button" class="btn btn-warning" disabled="disabled" style="margin:5px" role="button">Load</button>'
+							<div class="panel-body" style="text-align:center">"""
 				if loggingEnabled:
 					html += '<a href="/?loggingEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging</a>'
 				else:
 					html += '<a href="/?loggingEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging</a>'
+				html += '<hr/>'
 				if unansweredEnabled:
 					html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>unanswered calls</a>'
 				else:
@@ -245,17 +285,41 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							</div>
 							</form>
 					</div></div>
+
+					<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+						<div class="panel-heading">Load/Save Config<br/>&nbsp;</div>
+						<div class="panel-body" style="text-align:center">
+						<form class="form" role=" action="/" method="GET" >
+						  <div class="form-group">
+						      <input type="text" class="form-control" name="savename" placeholder="Name">
+						  </div>
+						  <div class="form-group">
+						      <input type="password" class="form-control" name="savesecret" placeholder="Passphrase">
+						  </div>
+						  <div class="form-group">
+						  	<button type="submit" class="btn btn-warning" style="margin:5px;">Save</button>
+						  </div>
+						</form>
+						<hr/><form role="form" action="/" method="GET" >
+							<div class="form-group">
+							<select class="form-control" name="loadname">"""
+				for name in getSavedConfigs():
+					html += '<option value ="' + name + '">' + name + "</option>"
+				html += """
+							</select>
+							</div>
+							<div class="form-group">
+								<input type="password" class="form-control" name="loadsecret" placeholder="Passphrase">
+							<div class="form-group">
+							<button type="submit" class="btn btn-warning" style="margin:5px;">Load</button>
+							</div></div>
+							</form>
 					</div>
 					</body>
 				</html>
 				"""
 				self.wfile.write(bytes(html))
-		else:
-			# If not authenticated
- 			self.do_AUTHHEAD()
-			self.wfile.write(self.headers.getheader('Authorization'))
-			self.wfile.write(' not authenticated')
-			pass
+		
 		logging.info("Time taken for request: " + str(time.time() - starttime))
 
 	def log_request(self, code=None, size=None):
@@ -276,22 +340,30 @@ def sliceDict(d, s):
 	"""
 	return {k:v for k,v in d.iteritems() if k.startswith(s)}
 
-def saveData(data, filename):
+def saveData(data, filename, passphrases):
 	"""
 	Save data in filename using pickle. Give data as tuple like (obj0, obj1, ...).
 	"""
-	datafile = open(os.path.join(os.path.join(os.path.dirname(__file__)), str(filename)), 'wb')
-	pickle.dump(data, datafile)
+	encoder = encryptedpickle.EncryptedPickle(signature_passphrases=passphrases, encryption_passphrases=passphrases)
 
-def loadData(filename):
+	datafile = open(os.path.join(os.path.join(os.path.dirname(__file__)), str(filename)), 'wb')
+	pickle.dump(encoder.seal(data), datafile)
+
+def loadData(filename, passphrase):
 	"""
 	Load previously saved data. Returns data as saved; usually tuple like (obj0, obj1, ...).
 	"""
+	passphrases = {0: passphrase}
+	encoder = encryptedpickle.EncryptedPickle(signature_passphrases=passphrases, encryption_passphrases=passphrases)
+
 	fname = os.path.join(os.path.join(os.path.dirname(__file__)), str(filename))
 	if os.path.isfile(fname):
 		datafile = open(fname, 'rb')
-		data = pickle.load(datafile)
-		return data
+		try:
+			data = encoder.unseal(pickle.load(datafile))
+			return data
+		except:
+			return None
 	else:
 		return None
 
@@ -365,6 +437,13 @@ def getUserId(fullName):
 		return result[0]['Id'] # return Id of first result
 	else:
 		return None
+
+def getSavedConfigs():
+	filenames = set()
+	for file in os.listdir(os.path.dirname(__file__)):
+		if file.endswith(".epk"):
+			filenames.add(file[:-4])
+	return filenames
 
 def getNumberTerm(phonenumber):
 	'''
@@ -713,30 +792,94 @@ def mainloop():
 ### START PROGRAM ###
 
 lastAPIconnection = time.time()
-AUTH_KEY = base64.b64encode(USERNAME+":"+PASSWORD)
 
-# load data, if previously saved
-data = loadData(FILENAME)
-try:
-	sharedUsers = data[0]
-	whitelistLogging = data[1]
-	unansweredEnabled = data[2]
-	loggingEnabled = data[3]
-	voicemailEnabled = data[4]
-except:
-	sharedUsers = {}
-	whitelistLogging = ()
-	unansweredEnabled = True
-	loggingEnabled = False
-	voicemailEnabled = True
-
-# create logged in Salesforce Object
-sf = Salesforce(instance=SF_INSTANCE, username=SF_USERNAME, password=SF_PASSWORD, security_token=SF_TOKEN)
 
 if __name__ == "__main__":
+	global sharedUsers
+	global whitelistLogging
+	global unansweredEnabled
+	global loggingEnabled
+	global voicemailEnabled
+	global port
+	global configfile
+	global filesecret
+	global authKey
+	global showMessage
+	
+	try:
+		authKey = base64.b64encode(USERNAME + ":" + PASSWORD)
+	except:
+		logging.warning("Not authentication for HTTP set.")
+
+
+	try:
+		opts, args = getopt.getopt(sys.argv[1:],"hp:f:s:",["help","port=","configfile=","secret="])
+	except getopt.GetoptError:
+		print "test.py -p <port> -f <configfile> -s <secret>"
+		sys.exit(2)
+	for opt, arg in opts:
+		if (opt == '-h' or opt == '--help'):
+			print "test.py -p <port> -f <configfile> -s <secret>"
+			sys.exit()
+		elif opt in ("-p", "--port"):
+			port = arg
+		elif opt in ("-f", "--configfile"):
+			configfile = arg
+		elif opt in ("-s", "--secret"):
+			filesecret = arg
+	
+	exitnow = False
+	try:
+		configfile
+		try:
+			filesecret
+		except:
+			print "Please specify secret if you would like to use a pre-saved config.\ntest.py -p <port> -f <configfile> -s <secret>"
+			exitnow = True
+	except:
+		pass
+
+	if exitnow:
+		sys.exit(2)
+
+	try:
+		port = int(port)
+	except:
+		port = 8008
+
+	try:
+		logging.info("Trying to load config from " + configfile)
+
+		data = loadData(configfile, filesecret*4)
+		sharedUsers = data[0]
+		whitelistLogging = data[1]
+		unansweredEnabled = data[2]
+		loggingEnabled = data[3]
+		voicemailEnabled = data[4]
+		authKey = data[5]
+
+		dataLoaded = True
+	except: # reset all
+			logging.warning("Could not load data from configfile")
+			dataLoaded = False
+	
+	if not dataLoaded:
+			sharedUsers = {}
+			whitelistLogging = ()
+			unansweredEnabled = True
+			loggingEnabled = False
+			voicemailEnabled = True
+
+	# create logged in Salesforce Object
+	sf = Salesforce(instance=SF_INSTANCE, username=SF_USERNAME, password=SF_PASSWORD, security_token=SF_TOKEN)
+
+	showMessage = set()
+
 	# Create new threads
 	serverThread = server()
 
 	# Start new Threads
 	serverThread.start()
 	mainloop()
+else:
+	print "Please start program directly to have it work correctly."

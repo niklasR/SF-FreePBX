@@ -11,9 +11,3 @@ SF_USERNAME = 'u@s.er'
 SF_PASSWORD = 'password'
 SF_TOKEN = 'T0K3N'
 SF_INSTANCE = 'instance.salesforce.com'
-
-# Webinterface
-PORT = 8080
-FILENAME = "data.pkl"
-USERNAME = "user"
-PASSWORD = "password"
