@@ -35,7 +35,7 @@ You need a user with the permissions to create tasks (i.e. log calls/activity) o
 ### SF-FreePBX
 
 SF-FreePBX requires Python, [Simple-Salesforce](https://github.com/neworganizing/simple-salesforce/) and [EncryptedPickle for Python](https://github.com/vingd/encrypted-pickle-python)
-Simple Salesforce can be installed with pip: `pip install simple-salesforce`, and so can EncryptedPickle: `pip install encrypted-pickle-python`.
+Simple Salesforce can be installed with pip: `pip install simple-salesforce`, and so can EncryptedPickle: `pip install EncryptedPickle`.
 
 ## Set-Up
 
