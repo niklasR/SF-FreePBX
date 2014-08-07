@@ -37,19 +37,16 @@ You need a user with the permissions to create tasks (i.e. log calls/activity) o
 SF-FreePBX requires Python, [Simple-Salesforce](https://github.com/neworganizing/simple-salesforce/) and [EncryptedPickle for Python](https://github.com/vingd/encrypted-pickle-python)
 Simple Salesforce can be installed with pip: `pip install simple-salesforce`, and so can EncryptedPickle: `pip install EncryptedPickle`.
 
-## Set-Up
+## Set-Up & Run
 
-Fill out the config file `pbxSF_config.py` with the relevant details.
-Your salesforce instance can be taken from the url when you are logged-in to . If it begins with `https://na1.salesforce.com`, for example, your instance would be `na1.salesforce.com`.
-
-## Run
-
-Just run `python pbxSF.py` and it should connect to Asterisk and SalesForce.
+Just run `python pbxSF.py` and configure the login details for FreePBX and SalesForce using the webinterface. By default this is accessible via http on port 8080. To specify your own port, run it with commandline argument `-p`.
 
 If you are not loading a previously saved config, you will be asked to specify a log-in for the webinterface the first time you open it.
 
-To specify your own port, run it with commandline argument `-p`, and to load a previously saved config, you can use `-f filename -s passphrase`.
-Take a look at the log to see if everything is running correctly. You should be able to configure extensions using the webinterface at `http://localhost:PORT` (the port is specified in the config).
+Your salesforce instance can be taken from the url when you are logged-in to . If it begins with `https://na1.salesforce.com`, for example, your instance would be `na1.salesforce.com`.
+
+To load a previously saved config, you can use `-f filename -s passphrase`.
+Take a look at the log to see if everything is running correctly.
 
 ## Configuration
 

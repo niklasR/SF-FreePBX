@@ -42,12 +42,18 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		"""
 		# Load global names
 		global authKey
+		global salesforceAuth
 		global whitelistLogging
 		global sharedUsers
 		global unansweredEnabled
 		global loggingEnabled
 		global voicemailEnabled
 		global showMessage
+		global sfValid
+		global sf
+		global asteriskAuth
+		global astValid
+		global asteriskUpdated
 
 		# Time request
 		starttime = time.time()
@@ -98,6 +104,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			for key, value in qs.items():
 				dict_print += "{} : {}".format(key, value) # for debug/log
 				dict_print += " | "
+			print dict_print
 
 			# Update active extensions
 			if 'whitelist' in qs:
@@ -113,7 +120,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Save config (encrypted)
 			if ('savename' in qs) and ('savesecret' in qs):
 				if len(qs['savesecret'][0]) >= 8:
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
+					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
 					logging.info("Config saved as " + qs['savename'][0] + ".epk")
 					showMessage.add("Config saved as '" + qs['savename'][0] + "'.")
 				else:
@@ -124,14 +131,19 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			if ('loadname' in qs) and ('loadsecret' in qs):
 				data = loadData(qs['loadname'][0] + ".epk", qs['loadsecret'][0]*4)
 				if data:
-					if len(data) == 6:
+					if len(data) == 10:
 						sharedUsers = data[0]
 						whitelistLogging = data[1]
 						unansweredEnabled = data[2]
 						loggingEnabled = data[3]
 						voicemailEnabled = data[4]
 						authKey = data[5]
+						salesforceAuth = data[6]
+						asteriskAuth = data[7]
+						astValid = data[8]
+						updateSF(salesforceAuth)
 						showMessage.add("Config loaded succesfully.")
+						logging.info("Config loaded from file: " + qs['loadname'][0])
 					else:
 						showMessage.add("Config could not be loaded: Format incompatible.")
 				else:
@@ -157,6 +169,31 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					loggingEnabled = False
 				elif qs['loggingEnabled'][0] == 'enable':
 					loggingEnabled = True
+
+			# Update Asterisk Data
+			if 'asterisk_cdr_secret' in qs and 'asterisk_cdr_user' in qs and 'asterisk_host' in qs and 'asterisk_port' in qs and 'asterisk_cmd_user' in qs and 'asterisk_cmd_secret' in qs:
+				logging.info("Updating asterisk logins...")
+				asteriskAuth = (qs['asterisk_host'][0], qs['asterisk_port'][0], qs['asterisk_cmd_user'][0], qs['asterisk_cmd_secret'][0], qs['asterisk_cdr_user'][0], qs['asterisk_cdr_secret'][0])
+				if isAstValid(asteriskAuth):
+					astValid = True
+					asteriskUpdated = True # to tell mainloop() to reconnect.
+					showMessage.add("AMI login details succesfully validated.")	
+					logging.info("Asterisk logins updated.")
+				else:
+					showMessage.add("AMI login details not correct.")
+					logging.warning("Asterisk logins incorrect")
+			elif 'asterisk_cdr_secret' in qs or 'asterisk_cdr_user' in qs or 'asterisk_host' in qs or 'asterisk_port' in qs or 'asterisk_cmd_user' in qs or 'asterisk_cmd_secret' in qs:
+				logging.warning("Only parts of Asterisk login data received.")
+				showMessage.add("Please enter all data associated with the FreePBX installation you would like to connect to. Please refer to the README if you're unsure about this.")
+
+			# Update Saleforce Data
+			if 'sf_instance' in qs and 'sf_token' in qs and 'sf_password' in qs and 'sf_username' in qs:
+				salesforceAuth = (qs['sf_instance'][0], qs['sf_username'][0], qs['sf_password'][0], qs['sf_token'][0])
+				updateSF(salesforceAuth)
+				logging.debug("Ready to update salesforce auth")
+			elif 'sf_instance' in qs or 'sf_token' in qs or 'sf_password' in qs or 'sf_username' in qs:
+				logging.warning("Only parts of SF login received.")
+				showMessage.add("Please enter all data associated with the SalesForce user would like to log-in with. Please refer to the README if you're unsure about this.")
 
 			# Add Shared User
 			if 'addUser' in qs:
@@ -203,7 +240,9 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					</div>"""
 				for i in range(len(showMessage)):
 					html += '<div class="alert alert-info" role="alert">' + str(showMessage.pop()) + '</div>'
-				html += """<div style="width:80%;margin-left:auto;margin-right:auto;">
+				html += '<div style="width:80%;margin-left:auto;margin-right:auto;">'
+				if sfValid and astValid:
+					html += """
 						<!--White List-->
 						<div class="panel panel-default" style="height:450px;float:left;width:250px;margin:5px;">
 							<div class="panel-heading">Active Users<br /><small>Additionally to the Shared Users</small></div>
@@ -211,82 +250,82 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							<form role="form" action="/" autocomplete="off" method="GET" >
 							<div class="form-group">
 							<select class="form-control" name="whitelist" multiple="multiple" style="height:300px;width=90%">"""
-				# save current data from SF and freePBX for access throughout processing of the request
-				extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
-				activeUsers = getActiveUsers()
-				activeUsersNames = getUsersNames(activeUsers)
-				
-				# Get active extensions and mark them as "selected" in the form.
-				for extension in extensions:
-					if extension[1] in activeUsersNames:
-						html += '<option value="' + extension[0]
-						if extension[0] in whitelistLogging:
-							html += '" selected="selected">'
-						else:
-							html += '">'
-						html += extension[0] + ": " + extension[1] + "</option>"
-				html += """
-							</select><br />
-							<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
-							</div>
-							</form>
-							</div>
-						</div>"""
-				# Get all configured shared user and generate panel with all extensions to assign to the shared user
-				for sharedUser in sharedUsers:
-					html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-							<div class="panel-heading">Shared User: """ + activeUsers[sharedUser]['Username'] + """</div>
-							<div class="panel-body">
-							<form role="form" action="/" autocomplete="off" method="GET" >
-							<div class="form-group">
-							<select class="form-control" name=""" + '"' + sharedUser + '" multiple="multiple" style="height:300px;width=90%">'
+					# save current data from SF and freePBX for access throughout processing of the request
 					extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
+					activeUsers = getActiveUsers()
+					activeUsersNames = getUsersNames(activeUsers)
+					
+					# Get active extensions and mark them as "selected" in the form.
 					for extension in extensions:
-						html += '<option value="' + extension[0]
-						if extension[0] in sharedUsers[sharedUser]:
-							html += '" selected="selected">'
-						else:
-							html += '">'
-						html += extension[0] + ": " + extension[1] + "</option>"
+						if extension[1] in activeUsersNames:
+							html += '<option value="' + extension[0]
+							if extension[0] in whitelistLogging:
+								html += '" selected="selected">'
+							else:
+								html += '">'
+							html += extension[0] + ": " + extension[1] + "</option>"
 					html += """
 								</select><br />
 								<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
-								<a href="/?deleteUser=""" + sharedUser + """" class="btn btn-danger" style="margin:5px;" role="button">Delete User</a>
 								</div>
 								</form>
 								</div>
 							</div>"""
-				# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
-				html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-							<div class="panel-heading">Options<br/>&nbsp;</div>
-							<div class="panel-body" style="text-align:center">"""
-				if loggingEnabled:
-					html += '<a href="/?loggingEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging</a>'
-				else:
-					html += '<a href="/?loggingEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging</a>'
-				html += '<hr/>'
-				if unansweredEnabled:
-					html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>unanswered calls</a>'
-				else:
-					html += '<a href="/?unanswered=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>unanswered calls</a>'
-				if voicemailEnabled:
-					html += '<a href="/?voicemail=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>voicemail</a>'
-				else:
-					html += '<a href="/?voicemail=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>voicemail</a>'
-				html += """<hr/><form role="form" action="/" method="GET" >
-							<div class="form-group">
-							<select class="form-control" name="addUser">"""
-				usersForShared = sorted(activeUsers.iteritems(), key=lambda (k,v): v['Username']) # Sort users by Username
-				for user in usersForShared:
-					html += '<option value ="' + user[0] + '">' + user[1]['Username'] + "</option>"
-				html += """
-							</select>
-							<button type="submit" class="btn btn-success" style="margin:5px;">Add Shared User</button>
-							</div>
-							</form>
-					</div></div>
+					# Get all configured shared user and generate panel with all extensions to assign to the shared user
+					for sharedUser in sharedUsers:
+						html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+								<div class="panel-heading">Shared User: """ + activeUsers[sharedUser]['Username'] + """</div>
+								<div class="panel-body">
+								<form role="form" action="/" autocomplete="off" method="GET" >
+								<div class="form-group">
+								<select class="form-control" name=""" + '"' + sharedUser + '" multiple="multiple" style="height:300px;width=90%">'
+						extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
+						for extension in extensions:
+							html += '<option value="' + extension[0]
+							if extension[0] in sharedUsers[sharedUser]:
+								html += '" selected="selected">'
+							else:
+								html += '">'
+							html += extension[0] + ": " + extension[1] + "</option>"
+						html += """
+									</select><br />
+									<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
+									<a href="/?deleteUser=""" + sharedUser + """" class="btn btn-danger" style="margin:5px;" role="button">Delete User</a>
+									</div>
+									</form>
+									</div>
+								</div>"""
+					# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
+					html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+								<div class="panel-heading">Options<br/>&nbsp;</div>
+								<div class="panel-body" style="text-align:center">"""
+					if loggingEnabled:
+						html += '<a href="/?loggingEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging</a>'
+					else:
+						html += '<a href="/?loggingEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging</a>'
+					html += '<hr/>'
+					if unansweredEnabled:
+						html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>unanswered calls</a>'
+					else:
+						html += '<a href="/?unanswered=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>unanswered calls</a>'
+					if voicemailEnabled:
+						html += '<a href="/?voicemail=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>voicemail</a>'
+					else:
+						html += '<a href="/?voicemail=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>voicemail</a>'
+					html += """<hr/><form role="form" action="/" method="GET" >
+								<div class="form-group">
+								<select class="form-control" name="addUser">"""
+					usersForShared = sorted(activeUsers.iteritems(), key=lambda (k,v): v['Username']) # Sort users by Username
+					for user in usersForShared:
+						html += '<option value ="' + user[0] + '">' + user[1]['Username'] + "</option>"
+					html += """
+								</select>
+								<button type="submit" class="btn btn-success" style="margin:5px;">Add Shared User</button>
+								</div>
+								</form>
+						</div></div>"""
 
-					<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+				html += """	<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 						<div class="panel-heading">Load/Save Config<br/>&nbsp;</div>
 						<div class="panel-body" style="text-align:center">
 						<form class="form" role=" action="/" method="GET" >
@@ -301,19 +340,101 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						  </div>
 						</form>
 						<hr/><form role="form" action="/" method="GET" >
-							<div class="form-group">
-							<select class="form-control" name="loadname">"""
+						<div class="form-group">
+						<select class="form-control" name="loadname">"""
 				for name in getSavedConfigs():
 					html += '<option value ="' + name + '">' + name + "</option>"
 				html += """
-							</select>
-							</div>
-							<div class="form-group">
-								<input type="password" class="form-control" name="loadsecret" placeholder="Passphrase">
-							<div class="form-group">
-							<button type="submit" class="btn btn-warning" style="margin:5px;">Load</button>
-							</div></div>
-							</form>
+						</select>
+						</div>
+						<div class="form-group">
+							<input type="password" class="form-control" name="loadsecret" placeholder="Passphrase">
+						<div class="form-group">
+						<button type="submit" class="btn btn-warning" style="margin:5px;">Load</button>
+						</form>
+					</div></div></div></div>
+					<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+						<div class="panel-heading">Asterisk/FreePBX Config<br/>&nbsp;</div>
+						<div class="panel-body">
+						<form class="form-horizontal" role=" action="/" method="GET" >
+						  <div class="form-group">
+						    <label for="asterisk_host" class="col-sm-6 control-label">Host</label>
+						    <div class="col-sm-6">
+						      <input type="text" class="form-control" name="asterisk_host" id="asterisk_host" value=\"""" + str(asteriskAuth[0]) + """\" placeholder="hostname">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="asterisk_port" class="col-sm-6 control-label">Port</label>
+						    <div class="col-sm-6">
+						      <input type="text" class="form-control" id="asterisk_port" name="asterisk_port" value=\"""" + str(asteriskAuth[1]) + """\" placeholder="5038">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="asterisk_cmd_user" class="col-sm-6 control-label">CMD User</label>
+						    <div class="col-sm-6">
+						      <input type="text" class="form-control" id="asterisk_cmd_user" name="asterisk_cmd_user" value=\"""" + str(asteriskAuth[2]) + """\" placeholder="amicmd">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="asterisk_cmd_secret" class="col-sm-6 control-label">CMD Secret</label>
+						    <div class="col-sm-6">
+						      <input type="password" class="form-control" id="asterisk_cmd_secret" name="asterisk_cmd_secret" placeholder="Secret">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="asterisk_cdr_user" class="col-sm-6 control-label">CDR User</label>
+						    <div class="col-sm-6">
+						      <input type="text" class="form-control" id="asterisk_cdr_user" name="asterisk_cdr_user" value=\"""" + str(asteriskAuth[4]) + """\" placeholder="amicdr">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="asterisk_cdr_secret" class="col-sm-6 control-label">CDR Secret</label>
+						    <div class="col-sm-6">
+						      <input type="password" class="form-control" id="asterisk_cdr_secret" name="asterisk_cdr_secret" placeholder="Secret">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <div class="col-sm-offset-2 col-sm-10">
+						      <button type="submit" class="btn btn-primary">Update</button>
+						    </div>
+						  </div>
+						</form>
+					</div></div>
+					<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+						<div class="panel-heading">SalesForce Config<br/>&nbsp;</div>
+						<div class="panel-body">
+						<form class="form-horizontal" role=" action="/" method="GET" >
+						  <div class="form-group">
+						    <label for="sf_instance" class="col-sm-6 control-label">Instance</label>
+						    <div class="col-sm-6">
+						      <input type="text" class="form-control" name="sf_instance" id="sf_instance" value=\"""" + str(salesforceAuth[0]) + """\" placeholder="in1.salesforce.com">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="sf_username" class="col-sm-6 control-label">User</label>
+						    <div class="col-sm-6">
+						      <input type="text" class="form-control" id="sf_username" name="sf_username" value=\"""" + str(salesforceAuth[1]) + """\" placeholder="user@ema.il">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="sf_password" class="col-sm-6 control-label">Password</label>
+						    <div class="col-sm-6">
+						      <input type="password" class="form-control" id="sf_password" name="sf_password" placeholder="Password">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <label for="sf_token" class="col-sm-6 control-label">Token</label>
+						    <div class="col-sm-6">
+						      <input type="password" class="form-control" id="sf_token" name="sf_token" value=\"""" + str(salesforceAuth[3]) + """\" placeholder="Token">
+						    </div>
+						  </div>
+						  <div class="form-group">
+						    <div class="col-sm-offset-2 col-sm-10">
+						      <button type="submit" class="btn btn-primary">Update</button>
+						    </div>
+						  </div>
+						</form>
+					</div></div>
 					</div>
 					</body>
 				</html>
@@ -372,9 +493,9 @@ def getAllExtensions():
 	Returns all extensions registered in FreePBX as a dictionary in the format {'ext': 'Name'}
 	'''
 	# Initialise Telnet connection and log in.
-	tn_ami = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
+	tn_ami = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
 	tn_ami.read_until("Asterisk Call Manager/1.1")
-	tn_ami.write("Action: Login\nUsername: " + ASTERISK_CMD_USER + "\nSecret: " + ASTERISK_CMD_SECRET + "\n\n")
+	tn_ami.write("Action: Login\nUsername: " + asteriskAuth[2] + "\nSecret: " + asteriskAuth[3] + "\n\n")
 
 	# Wait for fully booted
 	tn_ami.read_until("Status: Fully Booted")
@@ -572,9 +693,9 @@ def getQueueMembers(extension):
 	'''
 	members = []
 	# Initialise Telnet connection and log in.
-	tn_ami = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
+	tn_ami = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
 	tn_ami.read_until("Asterisk Call Manager/1.1")
-	tn_ami.write("Action: Login\nUsername: " + ASTERISK_CMD_USER + "\nSecret: " + ASTERISK_CMD_SECRET + "\n\n")
+	tn_ami.write("Action: Login\nUsername: " + asteriskAuth[2] + "\nSecret: " + asteriskAuth[3] + "\n\n")
 
 	# Wait for fully booted
 	tn_ami.read_until("Status: Fully Booted")
@@ -629,6 +750,47 @@ def isLoggingEnabled(extension):
 	else:
 		return False
 
+def updateSF(salesforceAuth):
+	global sfValid
+	global sf
+	try:
+		sf = Salesforce(instance=salesforceAuth[0], username=salesforceAuth[1], password=salesforceAuth[2], security_token=salesforceAuth[3])
+		sfValid = True
+	except:
+		sfValid = False
+
+def isAstValid(asteriskAuth):
+	try:
+		# Validate CMD user
+		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
+		tnTest.read_until("Asterisk Call Manager/1.1")
+		tnTest.write("Action: Login\nUsername: " + asteriskAuth[2] + "\nSecret: " + asteriskAuth[3] + "\n\n")
+
+		#Wait for fully booted
+		tnTest.read_until("Status: Fully Booted")
+		logging.info("AMI user validated")
+
+		# Close Telnet connection
+		tnTest.write("Action: Logoff" + "\n\n")
+		tnTest.close()
+
+		# Validate CDR user
+		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
+		tnTest.read_until("Asterisk Call Manager/1.1")
+		tnTest.write("Action: Login\nUsername: " + asteriskAuth[4] + "\nSecret: " + asteriskAuth[5] + "\n\n")
+
+		#Wait for fully booted
+		tnTest.read_until("Status: Fully Booted")
+		logging.info("AMI user validated")
+
+		# Close Telnet connection
+		tnTest.write("Action: Logoff" + "\n\n")
+		tnTest.close()
+
+		return True
+	except:
+		return False
+
 def mainloop():
 	'''
 	Main Function: Establishes connection to AMI and reads CDR events.
@@ -639,160 +801,170 @@ def mainloop():
 		- the phone number is registered with SalesForce (account or contact)
 	If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information, such as the duration and disposition, if configured.
 	'''
-	global lastAPIconnection
-	# Initialise Telnet connection and log in.
-	tn_cdr = telnetlib.Telnet(ASTERISK_HOST, ASTERISK_PORT)
-	tn_cdr.read_until("Asterisk Call Manager/1.1")
-	tn_cdr.write("Action: Login\nUsername: " + ASTERISK_CDR_USER + "\nSecret: " + ASTERISK_CDR_SECRET + "\n\n")
-
-	#Wait for fully booted
-	tn_cdr.read_until("Status: Fully Booted")
-	logging.info("AMI connection established, starting loop")
-	# Infinite loop for continuous AMI communication
 	while True:
-		data = tn_cdr.read_very_eager()
-		if len(data) > 0:
-			events = data.split("\r\n\r\n")
-			for event in events:
-				if str(getEventFieldValue('Event', event)) == 'Cdr':
-					logging.info("CDR logged:")
-					# Inbound calls to Extension
-					if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
-						logging.info("\tInbound")
-						if isLoggingEnabled(getEventFieldValue('Destination', event)):
-							# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
-							if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
-								if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailEnabled):
+		if (astValid and sfValid):
+			logging.info("Connecting to Asterisk..")
+			global lastAPIconnection
+			# Initialise Telnet connection and log in.
+			tn_cdr = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
+			tn_cdr.read_until("Asterisk Call Manager/1.1")
+			tn_cdr.write("Action: Login\nUsername: " + asteriskAuth[4] + "\nSecret: " + asteriskAuth[5] + "\n\n")
 
-									# Check if extension is saved as shared User in config
-									salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
-									# If not saved, check if extension matches any SalesForce user
-									if not salesforceUser:
-										localName = getAllExtensions()[getEventFieldValue('Destination', event)]
-										if localName:
-											salesforceUser = getUserId(str(localName))
-									# If SalesForce user matched via either of the above, proceed recordings.
-									if salesforceUser:
-										# check for number of contacts with SRC number and take action based on that:
-										#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
-										#		0: no match -> no log
-										#		1: exact match -> log with account
-										#		2: no exact match -> don't log
-										#	1: Log call with that contact
-										numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
+			#Wait for fully booted
+			tn_cdr.read_until("Status: Fully Booted")
+			logging.info("AMI connection established, starting loop")
+			# Infinite loop for continuous AMI communication
+			while True:
+				global asteriskUpdated
+				if asteriskUpdated:
+					asteriskUpdated = False
+					break
+				data = tn_cdr.read_very_eager()
+				if len(data) > 0:
+					events = data.split("\r\n\r\n")
+					for event in events:
+						if str(getEventFieldValue('Event', event)) == 'Cdr':
+							logging.info("CDR logged:")
+							# Inbound calls to Extension
+							if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
+								logging.info("\tInbound")
+								if isLoggingEnabled(getEventFieldValue('Destination', event)):
+									# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
+									if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
+										if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailEnabled):
 
-										if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-											numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
-											if (numberOfAccounts == 0):
-												logging.info("\tNo associated SalesForce account found.")
-											elif(numberOfAccounts == 1):
-												salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-												logging.info("\tSRC: " + getEventFieldValue('Source', event))
-												logging.info("\tSFA: " + salesforceAccount)
-												logging.info("\tDST: " + getEventFieldValue('Destination', event))
-												logging.info("\tSFU: " + salesforceUser)
-												logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-												logging.info("\tLogging Call in SalesForce...")
-												createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
-												logging.info("\tLogged.")
-											elif(numberOfAccounts > 1):
-												logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-										else: # exact contact salesforceAccountc
-											salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-											salesforceContact = getContactId(getEventFieldValue('Source', event))
-											logging.info("\tSRC: " + getEventFieldValue('Source', event))
-											logging.info("\tSFA: " + salesforceAccount)
-											logging.info("\tSFC: " + salesforceContact)
-											logging.info("\tDST: " + getEventFieldValue('Destination', event))
-											logging.info("\tSFU: " + salesforceUser)
-											logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-											logging.info("\tLogging Call in SalesForce...")
-											createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
+											# Check if extension is saved as shared User in config
+											salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
+											# If not saved, check if extension matches any SalesForce user
+											if not salesforceUser:
+												localName = getAllExtensions()[getEventFieldValue('Destination', event)]
+												if localName:
+													salesforceUser = getUserId(str(localName))
+											# If SalesForce user matched via either of the above, proceed recordings.
+											if salesforceUser:
+												# check for number of contacts with SRC number and take action based on that:
+												#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+												#		0: no match -> no log
+												#		1: exact match -> log with account
+												#		2: no exact match -> don't log
+												#	1: Log call with that contact
+												numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
 
+												if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+													numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
+													if (numberOfAccounts == 0):
+														logging.info("\tNo associated SalesForce account found.")
+													elif(numberOfAccounts == 1):
+														salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+														logging.info("\tSRC: " + getEventFieldValue('Source', event))
+														logging.info("\tSFA: " + salesforceAccount)
+														logging.info("\tDST: " + getEventFieldValue('Destination', event))
+														logging.info("\tSFU: " + salesforceUser)
+														logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+														logging.info("\tLogging Call in SalesForce...")
+														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
+														logging.info("\tLogged.")
+													elif(numberOfAccounts > 1):
+														logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+												else: # exact contact salesforceAccountc
+													salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+													salesforceContact = getContactId(getEventFieldValue('Source', event))
+													logging.info("\tSRC: " + getEventFieldValue('Source', event))
+													logging.info("\tSFA: " + salesforceAccount)
+													logging.info("\tSFC: " + salesforceContact)
+													logging.info("\tDST: " + getEventFieldValue('Destination', event))
+													logging.info("\tSFU: " + salesforceUser)
+													logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+													logging.info("\tLogging Call in SalesForce...")
+													createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
+
+											else:
+												logging.info("\tNo associated SalesForce user found.")
+										else:
+											logging.info("\tCalls to voicemail not logged.")
 									else:
-										logging.info("\tNo associated SalesForce user found.")
+										logging.info("\tUnanswered calls not logged.")
 								else:
-									logging.info("\tCalls to voicemail not logged.")
-							else:
-								logging.info("\tUnanswered calls not logged.")
-						else:
-							logging.info("\tLogging not enabled for this extension.")
+									logging.info("\tLogging not enabled for this extension.")
 
-					# Call From Internal
-					elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
-						logging.info("\tFrom Internal")
-						if isLoggingEnabled(getEventFieldValue('Source', event)):
-							# check whether the call has NOT been answered and if so, whether the extension has logging of unsanwered calls enabled
-							if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
-								if (len(str(getEventFieldValue('Destination', event))) > 4):
-									# Check if extension is saved as shared User in config
-									salesforceUser = getSharedUser(getEventFieldValue('Source', event))
-									# If not saved, check if extension matches any SalesForce user
-									if not salesforceUser:
-										localName = getAllExtensions()[getEventFieldValue('Source', event)]
-										if localName:
-											salesforceUser = getUserId(str(localName))
-									# If SalesForce user matched via either of the above, proceed recordings.
-									if salesforceUser:
-										# check for number of contacts with DST number and take action based on that:
-										#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
-										#		0: no match -> no log
-										#		1: exact match -> log with account
-										#		2: no exact match -> don't log
-										#	1: Log call with that contact
-										numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
-										if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-											numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
-											if (numberOfAccounts == 0):
-												logging.info("\tNo associated SalesForce account found.")
-											elif(numberOfAccounts == 1):
-												salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-												logging.info("\tSRC: " + getEventFieldValue('Source', event))
-												logging.info("\tSFA: " + salesforceAccount)
-												logging.info("\tDST: " + getEventFieldValue('Destination', event))
-												logging.info("\tSFU: " + salesforceUser)
-												logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-												logging.info("\tLogging Call in SalesForce...")
-												createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
-												logging.info("\tLogged.")
-											elif(numberOfAccounts > 1):
-												logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-										else: # exact contact match
-											salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-											salesforceContact = getContactId(getEventFieldValue('Destination', event))
-											logging.info("\tSRC: " + getEventFieldValue('Source', event))
-											logging.info("\tSFA: " + salesforceAccount)
-											logging.info("\tSFC: " + salesforceContact)
-											logging.info("\tDST: " + getEventFieldValue('Destination', event))
-											logging.info("\tSFU: " + salesforceUser)
-											logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-											logging.info("\tLogging Call in SalesForce...")
-											createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
+							# Call From Internal
+							elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
+								logging.info("\tFrom Internal")
+								if isLoggingEnabled(getEventFieldValue('Source', event)):
+									# check whether the call has NOT been answered and if so, whether the extension has logging of unsanwered calls enabled
+									if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
+										if (len(str(getEventFieldValue('Destination', event))) > 4):
+											# Check if extension is saved as shared User in config
+											salesforceUser = getSharedUser(getEventFieldValue('Source', event))
+											# If not saved, check if extension matches any SalesForce user
+											if not salesforceUser:
+												localName = getAllExtensions()[getEventFieldValue('Source', event)]
+												if localName:
+													salesforceUser = getUserId(str(localName))
+											# If SalesForce user matched via either of the above, proceed recordings.
+											if salesforceUser:
+												# check for number of contacts with DST number and take action based on that:
+												#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+												#		0: no match -> no log
+												#		1: exact match -> log with account
+												#		2: no exact match -> don't log
+												#	1: Log call with that contact
+												numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
+												if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+													numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
+													if (numberOfAccounts == 0):
+														logging.info("\tNo associated SalesForce account found.")
+													elif(numberOfAccounts == 1):
+														salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+														logging.info("\tSRC: " + getEventFieldValue('Source', event))
+														logging.info("\tSFA: " + salesforceAccount)
+														logging.info("\tDST: " + getEventFieldValue('Destination', event))
+														logging.info("\tSFU: " + salesforceUser)
+														logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+														logging.info("\tLogging Call in SalesForce...")
+														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
+														logging.info("\tLogged.")
+													elif(numberOfAccounts > 1):
+														logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+												else: # exact contact match
+													salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+													salesforceContact = getContactId(getEventFieldValue('Destination', event))
+													logging.info("\tSRC: " + getEventFieldValue('Source', event))
+													logging.info("\tSFA: " + salesforceAccount)
+													logging.info("\tSFC: " + salesforceContact)
+													logging.info("\tDST: " + getEventFieldValue('Destination', event))
+													logging.info("\tSFU: " + salesforceUser)
+													logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+													logging.info("\tLogging Call in SalesForce...")
+													createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
 
+											else:
+												logging.info("\tNo associated SalesForce user found.")
+										else:
+											logging.info("\tExtension dialled.")
 									else:
-										logging.info("\tNo associated SalesForce user found.")
+										logging.info("\tUnanswered calls not logged.")
 								else:
-									logging.info("\tExtension dialled.")
+									logging.info("\tLogging not enabled for this extension.")
 							else:
-								logging.info("\tUnanswered calls not logged.")
-						else:
-							logging.info("\tLogging not enabled for this extension.")
-					else:
-						logging.info("\t" + str(getEventFieldValue('DestinationContext', event)))
+								logging.info("\t" + str(getEventFieldValue('DestinationContext', event)))
 
-		# if last API call to SF older than 9 minutes make new API call to avoid session timeout
-		if ((time.time()-(lastAPIconnection)) > (60*9)):
-			logging.info("Making dummy API call to avoid SF session timeout...")
-			sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
-			lastAPIconnection = time.time()
-			logging.info("API call made.")
-		
-		time.sleep(5)
+				# if last API call to SF older than 9 minutes make new API call to avoid session timeout
+				if ((time.time()-(lastAPIconnection)) > (60*9)):
+					logging.info("Making dummy API call to avoid SF session timeout...")
+					sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
+					lastAPIconnection = time.time()
+					logging.info("API call made.")
+				
+				time.sleep(5)
+		else:
+			time.sleep(1)
 
 ### START PROGRAM ###
 
 lastAPIconnection = time.time()
-
+asteriskUpdated = False
+sf = None
 
 if __name__ == "__main__":
 	global sharedUsers
@@ -805,6 +977,10 @@ if __name__ == "__main__":
 	global filesecret
 	global authKey
 	global showMessage
+	global sfValid
+	global salesforceAuth
+	global asteriskAuth
+	global astValid
 	
 	try:
 		authKey = base64.b64encode(USERNAME + ":" + PASSWORD)
@@ -846,7 +1022,6 @@ if __name__ == "__main__":
 		port = int(port)
 	except:
 		port = 8008
-
 	try:
 		logging.info("Trying to load config from " + configfile)
 
@@ -857,21 +1032,29 @@ if __name__ == "__main__":
 		loggingEnabled = data[3]
 		voicemailEnabled = data[4]
 		authKey = data[5]
+		salesforceAuth = data[6]
+		asteriskAuth = data[7]
+		astValid = data[8]
+		sFValid = data[9]
+		updateSF(salesforceAuth)
 
 		dataLoaded = True
+		sfValid = True
+		astValid = True
 	except: # reset all
 			logging.warning("Could not load data from configfile")
 			dataLoaded = False
 	
 	if not dataLoaded:
-			sharedUsers = {}
-			whitelistLogging = ()
-			unansweredEnabled = True
-			loggingEnabled = False
-			voicemailEnabled = True
-
-	# create logged in Salesforce Object
-	sf = Salesforce(instance=SF_INSTANCE, username=SF_USERNAME, password=SF_PASSWORD, security_token=SF_TOKEN)
+		sharedUsers = {}
+		whitelistLogging = ()
+		unansweredEnabled = True
+		loggingEnabled = False
+		voicemailEnabled = True
+		salesforceAuth = ('', '', '', '')
+		asteriskAuth = ('', '', '', '', '', '')
+		sfValid = False
+		astValid = False
 
 	showMessage = set()
 
