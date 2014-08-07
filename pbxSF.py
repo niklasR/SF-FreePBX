@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging
-from pbxSF_config import *
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
