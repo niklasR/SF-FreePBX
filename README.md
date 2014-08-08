@@ -48,6 +48,9 @@ Your salesforce instance can be taken from the url when you are logged-in to . I
 To load a previously saved config, you can use `-f filename -s passphrase`.
 Take a look at the log to see if everything is running correctly.
 
+### SSL
+If you place a certificate file called `server.pem` containing a certificate and private key, the server will be started as an HTTPS server. You can generate a simple, self-signed certificate valid for 30 days for example with `openssl req -new -x509 -keyout server.pem -out server.pem -days 30 -nodes`. Please be aware of the implications of using self-signed certificates or passphrase-less certificates.
+
 ## Configuration
 
 The webinterface has several options. Please note that all changes made in the webinterface take effect immediately and no "Apply Config" or saving is needed.

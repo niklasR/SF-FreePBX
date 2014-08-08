@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint
+import BaseHTTPServer, ssl 
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
@@ -8,9 +9,15 @@ class server(threading.Thread):
     def __init__(self,):
         threading.Thread.__init__(self)
     def run(self):
-        logging.info("SERVER started on port " + str(port))
-        Handler = MyHandler
-        httpd = SocketServer.TCPServer(("", port), Handler)
+    	# if certificate exists, start as SSL
+        if os.path.isfile(os.path.join(os.path.join(os.path.dirname(__file__)), 'server.pem')):
+        	httpd = BaseHTTPServer.HTTPServer(("", port), MyHandler)
+        	logging.info("SERVER started with SSL. Connect with https://<localhost>:" + str(port))
+        	httpd.socket = ssl.wrap_socket (httpd.socket, certfile=os.path.join(os.path.join(os.path.dirname(__file__)), 'server.pem'), server_side=True) # certfile needs to include private key and certificate
+        else:
+        	httpd = SocketServer.TCPServer(("", port), MyHandler)
+        	logging.info("SERVER started. Connect with http://<localhost>:" + str(port))
+        
         httpd.serve_forever()
         logging.info("Exiting SERVER")
         
@@ -264,6 +271,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		self.send_header("Content-type", "text/html")
 		self.end_headers()
 		self.wfile.write(bytes(self.generateHTML()))
+		logging.info("Time taken for request: " + str(time.time() - starttime))
 
 	def generateHTML(self):
 		global authKey
