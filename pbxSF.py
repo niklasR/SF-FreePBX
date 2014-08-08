@@ -1,8 +1,11 @@
 #! /usr/bin/env python
-import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint
+import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint, smtplib
 import BaseHTTPServer, ssl 
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
+from email.mime.text import MIMEText
+from email.MIMEMultipart import MIMEMultipart
+
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
 class server(threading.Thread):
@@ -47,6 +50,9 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		# Load global names
 		global authKey
 		global showMessage
+		global voicemailEnabled
+		global unansweredEnabled
+		global loggingEnabled
 
 		# Time request
 		starttime = time.time()
@@ -84,6 +90,43 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					authorised = True
 
 		if authorised == True:
+
+			# Analyse HTTP GET content
+			qs = {}
+			path = self.path
+			if '?' in path:
+				path, tmp = path.split('?', 1)
+				qs = urlparse.parse_qs(tmp)
+			logging.info("Path: " + path)
+
+			# Print GET content
+			dict_print = ""
+			for key, value in qs.items():
+				dict_print += "{} : {}".format(key, value) # for debug/log
+				dict_print += "\n"
+			logging.info("" + dict_print)
+
+			# Enable/Disable logging of unanswered calls
+			if 'unanswered' in qs:
+				if qs['unanswered'][0] == 'disable':
+					unansweredEnabled = False
+				elif qs['unanswered'][0] == 'enable':
+					unansweredEnabled = True
+
+			# Enable/Disable logging of calls gone to voicemail
+			if 'voicemail' in qs:
+				if qs['voicemail'][0] == 'disable':
+					voicemailEnabled = False
+				elif qs['voicemail'][0] == 'enable':
+					voicemailEnabled = True
+
+			# Enable/Disable logging
+			if 'loggingEnabled' in qs:
+				if qs['loggingEnabled'][0] == 'disable':
+					loggingEnabled = False
+				elif qs['loggingEnabled'][0] == 'enable':
+					loggingEnabled = True
+
 			# Generate webpage
 			# Send HTTP 200 Header
 			self.send_response(200, 'OK')
@@ -110,6 +153,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global asteriskAuth
 		global astValid
 		global asteriskUpdated
+		global smtpValid
+		global smtpAuth
 
 		# Time request
 		starttime = time.time()
@@ -179,7 +224,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Save config (encrypted)
 			if ('savename' in qs) and ('savesecret' in qs):
 				if len(qs['savesecret'][0]) >= 8:
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
+					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
 					logging.info("Config saved as " + qs['savename'][0] + ".epk")
 					showMessage.add("Config saved as '" + qs['savename'][0] + "'.")
 				else:
@@ -190,7 +235,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			if ('loadname' in qs) and ('loadsecret' in qs):
 				data = loadData(qs['loadname'][0] + ".epk", qs['loadsecret'][0]*4)
 				if data:
-					if len(data) == 10:
+					if len(data) == 12:
 						sharedUsers = data[0]
 						whitelistLogging = data[1]
 						unansweredEnabled = data[2]
@@ -200,6 +245,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						salesforceAuth = data[6]
 						asteriskAuth = data[7]
 						astValid = data[8]
+						smtpAuth = data[10]
+						smtpValid = data[11]
 						updateSF(salesforceAuth)
 						showMessage.add("Config loaded succesfully.")
 						logging.info("Config loaded from file: " + qs['loadname'][0])
@@ -207,27 +254,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						showMessage.add("Config could not be loaded: Format incompatible.")
 				else:
 					showMessage.add("Config could not be loaded: File not found or passphrase wrong.")
-
-			# Enable/Disable logging of unanswered calls
-			if 'unanswered' in qs:
-				if qs['unanswered'][0] == 'disable':
-					unansweredEnabled = False
-				elif qs['unanswered'][0] == 'enable':
-					unansweredEnabled = True
-
-			# Enable/Disable logging of calls gone to voicemail
-			if 'voicemail' in qs:
-				if qs['voicemail'][0] == 'disable':
-					voicemailEnabled = False
-				elif qs['voicemail'][0] == 'enable':
-					voicemailEnabled = True
-
-			# Enable/Disable logging
-			if 'loggingEnabled' in qs:
-				if qs['loggingEnabled'][0] == 'disable':
-					loggingEnabled = False
-				elif qs['loggingEnabled'][0] == 'enable':
-					loggingEnabled = True
 
 			# Update Asterisk Data
 			if 'asterisk_cdr_secret' in qs and 'asterisk_cdr_user' in qs and 'asterisk_host' in qs and 'asterisk_port' in qs and 'asterisk_cmd_user' in qs and 'asterisk_cmd_secret' in qs:
@@ -250,10 +276,18 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			if 'sf_instance' in qs and 'sf_token' in qs and 'sf_password' in qs and 'sf_username' in qs:
 				salesforceAuth = (qs['sf_instance'][0], qs['sf_username'][0], qs['sf_password'][0], qs['sf_token'][0])
 				updateSF(salesforceAuth)
-				logging.debug("Ready to update salesforce auth")
 			elif 'sf_instance' in qs or 'sf_token' in qs or 'sf_password' in qs or 'sf_username' in qs:
 				logging.warning("Only parts of SF login received.")
 				showMessage.add("Please enter all data associated with the SalesForce user would like to log-in with. Please refer to the README if you're unsure about this.")
+
+			# Update SMTP Data
+			if 'email_port' in qs and 'email_server' in qs and 'email_address' in qs and 'email_username' in qs and 'email_password' in qs:
+				smtpAuth = qs['email_server'][0], qs['email_port'][0], qs['email_address'][0], qs['email_username'][0], qs['email_password'][0] 
+				smtpValid = True
+				logging.info("smtp Data updated")
+			elif 'email_port' in qs or 'email_server' in qs or 'email_address' in qs or 'email_username' in qs or 'email_password' in qs:
+				logging.warning("Only parts of SMTP auth received.")
+				showMessage.add("Please enter all data associated with the email address you would like to use.")
 
 			# Add Shared User
 			if 'addUser' in qs:
@@ -390,6 +424,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						</div>
 						</form>
 				</div></div>"""
+		else:
+			logging.warning("SF Data Valid: " + str(sfValid) + "; ast Data Valid: " + str(astValid))
 
 		html += """	<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">Load/Save Config<br/>&nbsp;</div>
@@ -492,6 +528,47 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				    <label for="sf_token" class="col-sm-6 control-label">Token</label>
 				    <div class="col-sm-6">
 				      <input type="text" class="form-control" id="sf_token" name="sf_token" value=\"""" + str(salesforceAuth[3]) + """\" placeholder="Token">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <div class="col-sm-offset-2 col-sm-10">
+				      <button type="submit" class="btn btn-primary">Update</button>
+				    </div>
+				  </div>
+				</form>
+			</div></div>
+			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+				<div class="panel-heading">Email Config<br/>&nbsp;</div>
+				<div class="panel-body">
+				<form class="form-horizontal" role=" action="/" method="POST" >
+				  <div class="form-group">
+				    <label for="email_server" class="col-sm-6 control-label">Host</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" name="email_server" id="email_server" value=\"""" + str(smtpAuth[0]) + """\" placeholder="ssl.mail.example.com">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="email_port" class="col-sm-6 control-label">Port</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="email_port" name="email_port" value=\"""" + str(smtpAuth[1]) + """\" placeholder="465">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="email_address" class="col-sm-6 control-label">Email</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="email_address" name="email_address" value=\"""" + str(smtpAuth[2]) + """\" placeholder="mailname@example.com">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="email_username" class="col-sm-6 control-label">Username</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="email_username" name="email_username" value=\"""" + str(smtpAuth[3]) + """\" placeholder="mailname">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="email_password" class="col-sm-6 control-label">Password</label>
+				    <div class="col-sm-6">
+				      <input type="password" class="form-control" id="email_password" name="email_password" placeholder="Password">
 				    </div>
 				  </div>
 				  <div class="form-group">
@@ -717,8 +794,9 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 	'''
 	Creates new, completed "Call" task in SalesForce to show up in the account's Activity History
 	'''
+	global smtpAuth
 	if loggingEnabled:
-		sf.Task.create({
+		task = sf.Task.create({
 			'Type':'Called',
 			'WhatId':accountId,
 			'OwnerID':userId,
@@ -732,7 +810,10 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 			'ActivityDate':time.strftime('%Y-%m-%d')
 			})
 		lastAPIconnection = time.time()
-		logging.info("\tLogged.")
+		logging.info("\tCall logged. Task Id: " + str(task['id']) + ".")
+		sendEmail(userId, task['id'], smtpAuth)
+		logging.info("\tEmail sent.")
+
 	else:
 		logging.info("\t------")
 		logging.info("\tLOGGING NOT ENABLED")
@@ -820,8 +901,10 @@ def updateSF(salesforceAuth):
 	try:
 		sf = Salesforce(instance=salesforceAuth[0], username=salesforceAuth[1], password=salesforceAuth[2], security_token=salesforceAuth[3])
 		sfValid = True
+		logging.info("SF Object created.")
 	except:
 		sfValid = False
+		logging.warning("SF Object could not be created.")
 
 def isAstValid(asteriskAuth):
 	try:
@@ -854,6 +937,20 @@ def isAstValid(asteriskAuth):
 		return True
 	except:
 		return False
+
+def sendEmail(userId, taskId, smtpAuth):
+	global salesforceAuth
+	server = smtplib.SMTP_SSL(host=smtpAuth[0], port=int(smtpAuth[1]))
+	server.login(smtpAuth[3], smtpAuth[4])
+
+	msg = MIMEMultipart()
+	msg['From'] = smtpAuth[2]
+	msg['To'] = sf.User.get(userId)['Email']
+	msg['Subject'] = 'Your call with ' + sf.Account.get(sf.Task.get(taskId)['WhatId'])['Name'] + '.'
+	body = "Hi " + sf.User.get(userId)['FirstName'] + ",\nyou have just finished a call which has been logged in SalesForce.\n\nPlease update the entry with details about the call: http://" + salesforceAuth[0] + "/" + taskId
+
+	msg.attach(MIMEText(body, 'plain'))	
+	server.sendmail(smtpAuth[2], msg['To'], msg.as_string())
 
 def mainloop():
 	'''
@@ -1044,6 +1141,8 @@ if __name__ == "__main__":
 	global salesforceAuth
 	global asteriskAuth
 	global astValid
+	global smtpAuth
+	global smtpValid
 	
 	try:
 		authKey = base64.b64encode(USERNAME + ":" + PASSWORD)
@@ -1063,7 +1162,7 @@ if __name__ == "__main__":
 		elif opt in ("-p", "--port"):
 			port = arg
 		elif opt in ("-f", "--configfile"):
-			configfile = arg
+			configfile = arg + '.epk'
 		elif opt in ("-s", "--secret"):
 			filesecret = arg
 	
@@ -1099,6 +1198,8 @@ if __name__ == "__main__":
 		asteriskAuth = data[7]
 		astValid = data[8]
 		sFValid = data[9]
+		smtpAuth = data[10]
+		smtpValid = data[11]
 		updateSF(salesforceAuth)
 
 		dataLoaded = True
@@ -1115,8 +1216,10 @@ if __name__ == "__main__":
 		loggingEnabled = False
 		voicemailEnabled = True
 		salesforceAuth = ('', '', '', '')
+		smtpAuth = ('', '', '', '')
 		asteriskAuth = ('', '', '', '', '', '')
 		sfValid = False
+		smtpValid = False
 		astValid = False
 
 	showMessage = set()
