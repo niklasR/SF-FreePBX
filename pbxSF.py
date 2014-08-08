@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging
+import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
 logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
@@ -36,9 +36,59 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		self.end_headers()
 
 	def do_GET(self):
-		"""
-		Serve regular requests.
-		"""
+		"""Serve regular requests."""
+		# Load global names
+		global authKey
+		global showMessage
+
+		# Time request
+		starttime = time.time()
+		authorised = False
+
+		# Present frontpage with user authentication, if key set in config; otherwise ask for key!
+		try:
+			if authKey:
+				logging.info("HTTP authentication requested.")
+				if self.headers.getheader('Authorization') == None:
+					self.do_AUTHHEAD(realm="pbxSF login")
+					self.wfile.write('no auth header received')
+					pass
+				elif self.headers.getheader('Authorization') == 'Basic ' + authKey:
+					logging.info("HTTP Authorised.")
+					authorised = True
+				else:
+					# If not authenticated
+		 			self.do_AUTHHEAD(realm="pbxSF login")
+					self.wfile.write(self.headers.getheader('Authorization'))
+					self.wfile.write(' not authenticated')
+					pass
+		except:
+			logging.info("Request user to set HTTP auth details.")
+			if not self.headers.getheader('Authorization'):
+				self.do_AUTHHEAD(realm="First time run: Please enter the log in you would like to use for the webinterface.")
+			else:
+				if self.headers.getheader('Authorization') == None:
+					self.wfile.write('no auth header received')
+				else:
+					authKey = self.headers.getheader('Authorization').strip('Basic ')
+					showMessage.add("Your log-in details have been saved!")
+					logging.info("HTTP auth details set.")
+					logging.info("HTTP Authorised.")
+					authorised = True
+
+		if authorised == True:
+			# Generate webpage
+			# Send HTTP 200 Header
+			self.send_response(200, 'OK')
+			self.send_header('Content-type', 'text/html')
+			self.end_headers()
+
+			self.wfile.write(bytes(self.generateHTML()))
+			
+		logging.info("Time taken for request: " + str(time.time() - starttime))
+
+	def do_POST(self):
+		"""Respond to a POST request."""
 		# Load global names
 		global authKey
 		global salesforceAuth
@@ -90,20 +140,23 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					authorised = True
 
 		if authorised == True:
-			# Analyse HTTP GET content
+			# Analyse HTTP Path
 			qs = {}
 			path = self.path
 			if '?' in path:
 				path, tmp = path.split('?', 1)
-				qs = urlparse.parse_qs(tmp)
 			logging.info("Path: " + path)
 			
-			# Print GET content
+			# HTTP Post
+			length = int(self.headers['Content-Length'])
+			qs = urlparse.parse_qs(self.rfile.read(length))
+
+			# Print POST content
 			dict_print = ""
 			for key, value in qs.items():
 				dict_print += "{} : {}".format(key, value) # for debug/log
 				dict_print += " | "
-			print dict_print
+			logging.info("POST: " + dict_print)
 
 			# Update active extensions
 			if 'whitelist' in qs:
@@ -179,6 +232,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					showMessage.add("AMI login details succesfully validated.")	
 					logging.info("Asterisk logins updated.")
 				else:
+					astValid = False
 					showMessage.add("AMI login details not correct.")
 					logging.warning("Asterisk logins incorrect")
 			elif 'asterisk_cdr_secret' in qs or 'asterisk_cdr_user' in qs or 'asterisk_host' in qs or 'asterisk_port' in qs or 'asterisk_cmd_user' in qs or 'asterisk_cmd_secret' in qs:
@@ -206,241 +260,244 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			for sharedUserGet in sharedUsersGet:
 				sharedUsers[sharedUserGet] = sharedUsersGet[sharedUserGet]
 
-			# Redirect to / if any GET arguments sent (and processed), so user don't accidentally refresh with same arguments.
-			if len(qs) > 0: # if any GET argumentst
-				self.send_response(302)
-				self.send_header("Location", "/")
-				self.end_headers()
-			else:
-				# Generate webpage
-				# Send HTTP 200 Header
-				self.send_response(200, 'OK')
-				self.send_header('Content-type', 'text/html')
-				self.end_headers()
+		self.send_response(200)
+		self.send_header("Content-type", "text/html")
+		self.end_headers()
+		self.wfile.write(bytes(self.generateHTML()))
 
-				# HTML holds and collects content of webpage until transmission
-				html = """
-				<!doctype html>
-				<html>
-					<head>
-						<meta charset="UTF-8">
-						<meta name="viewport" content="width=device-width, initial-scale=1">
-						<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-						<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
-						<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
-						<script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
-						<script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
-						<script src="//code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
-						<title>PBXsf</title>
-					</head>
-					<body style="width:95%;margin-left:auto;margin-right:auto;">
-					<div class="page-header">
-						<h1>PBXsf <small>Logging FreePBX calls in SalesForce</small></h1>
-					</div>"""
-				for i in range(len(showMessage)):
-					html += '<div class="alert alert-info" role="alert">' + str(showMessage.pop()) + '</div>'
-				html += '<div style="width:80%;margin-left:auto;margin-right:auto;">'
-				if sfValid and astValid:
-					html += """
-						<!--White List-->
-						<div class="panel panel-default" style="height:450px;float:left;width:250px;margin:5px;">
-							<div class="panel-heading">Active Users<br /><small>Additionally to the Shared Users</small></div>
-							<div class="panel-body">
-							<form role="form" action="/" autocomplete="off" method="GET" >
-							<div class="form-group">
-							<select class="form-control" name="whitelist" multiple="multiple" style="height:300px;width=90%">"""
-					# save current data from SF and freePBX for access throughout processing of the request
-					extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
-					activeUsers = getActiveUsers()
-					activeUsersNames = getUsersNames(activeUsers)
-					
-					# Get active extensions and mark them as "selected" in the form.
-					for extension in extensions:
-						if extension[1] in activeUsersNames:
-							html += '<option value="' + extension[0]
-							if extension[0] in whitelistLogging:
-								html += '" selected="selected">'
-							else:
-								html += '">'
-							html += extension[0] + ": " + extension[1] + "</option>"
-					html += """
-								</select><br />
-								<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
-								</div>
-								</form>
-								</div>
-							</div>"""
-					# Get all configured shared user and generate panel with all extensions to assign to the shared user
-					for sharedUser in sharedUsers:
-						html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-								<div class="panel-heading">Shared User: """ + activeUsers[sharedUser]['Username'] + """</div>
-								<div class="panel-body">
-								<form role="form" action="/" autocomplete="off" method="GET" >
-								<div class="form-group">
-								<select class="form-control" name=""" + '"' + sharedUser + '" multiple="multiple" style="height:300px;width=90%">'
-						extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
-						for extension in extensions:
-							html += '<option value="' + extension[0]
-							if extension[0] in sharedUsers[sharedUser]:
-								html += '" selected="selected">'
-							else:
-								html += '">'
-							html += extension[0] + ": " + extension[1] + "</option>"
-						html += """
-									</select><br />
-									<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
-									<a href="/?deleteUser=""" + sharedUser + """" class="btn btn-danger" style="margin:5px;" role="button">Delete User</a>
-									</div>
-									</form>
-									</div>
-								</div>"""
-					# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
-					html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-								<div class="panel-heading">Options<br/>&nbsp;</div>
-								<div class="panel-body" style="text-align:center">"""
-					if loggingEnabled:
-						html += '<a href="/?loggingEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging</a>'
-					else:
-						html += '<a href="/?loggingEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging</a>'
-					html += '<hr/>'
-					if unansweredEnabled:
-						html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>unanswered calls</a>'
-					else:
-						html += '<a href="/?unanswered=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>unanswered calls</a>'
-					if voicemailEnabled:
-						html += '<a href="/?voicemail=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>voicemail</a>'
-					else:
-						html += '<a href="/?voicemail=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>voicemail</a>'
-					html += """<hr/><form role="form" action="/" method="GET" >
-								<div class="form-group">
-								<select class="form-control" name="addUser">"""
-					usersForShared = sorted(activeUsers.iteritems(), key=lambda (k,v): v['Username']) # Sort users by Username
-					for user in usersForShared:
-						html += '<option value ="' + user[0] + '">' + user[1]['Username'] + "</option>"
-					html += """
-								</select>
-								<button type="submit" class="btn btn-success" style="margin:5px;">Add Shared User</button>
-								</div>
-								</form>
-						</div></div>"""
+	def generateHTML(self):
+		global authKey
+		global salesforceAuth
+		global whitelistLogging
+		global sharedUsers
+		global unansweredEnabled
+		global loggingEnabled
+		global voicemailEnabled
+		global showMessage
+		global sfValid
+		global asteriskAuth
+		global astValid
 
-				html += """	<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-						<div class="panel-heading">Load/Save Config<br/>&nbsp;</div>
-						<div class="panel-body" style="text-align:center">
-						<form class="form" role=" action="/" method="GET" >
-						  <div class="form-group">
-						      <input type="text" class="form-control" name="savename" placeholder="Name">
-						  </div>
-						  <div class="form-group">
-						      <input type="password" class="form-control" name="savesecret" placeholder="Passphrase">
-						  </div>
-						  <div class="form-group">
-						  	<button type="submit" class="btn btn-warning" style="margin:5px;">Save</button>
-						  </div>
-						</form>
-						<hr/><form role="form" action="/" method="GET" >
-						<div class="form-group">
-						<select class="form-control" name="loadname">"""
-				for name in getSavedConfigs():
-					html += '<option value ="' + name + '">' + name + "</option>"
-				html += """
-						</select>
+		html = """
+		<!doctype html>
+		<html>
+			<head>
+				<meta charset="UTF-8">
+				<meta name="viewport" content="width=device-width, initial-scale=1">
+				<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+				<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+				<link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
+				<script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+				<script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
+				<script src="//code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
+				<title>PBXsf</title>
+			</head>
+			<body style="width:95%;margin-left:auto;margin-right:auto;">
+			<div class="page-header">
+				<h1>PBXsf <small>Logging FreePBX calls in SalesForce</small></h1>
+			</div>"""
+		for i in range(len(showMessage)):
+			html += '<div class="alert alert-info" role="alert">' + str(showMessage.pop()) + '</div>'
+		html += '<div style="width:80%;margin-left:auto;margin-right:auto;">'
+		if sfValid and astValid:
+			html += """
+				<!--White List-->
+				<div class="panel panel-default" style="height:450px;float:left;width:250px;margin:5px;">
+					<div class="panel-heading">Active Users<br /><small>Additionally to the Shared Users</small></div>
+					<div class="panel-body">
+					<form role="form" action="/" autocomplete="off" method="POST">
+					<div class="form-group">
+					<select class="form-control" name="whitelist" multiple="multiple" style="height:300px;width=90%">"""
+			# save current data from SF and freePBX for access throughout processing of the request
+			extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
+			activeUsers = getActiveUsers()
+			activeUsersNames = getUsersNames(activeUsers)
+			
+			# Get active extensions and mark them as "selected" in the form.
+			for extension in extensions:
+				if extension[1] in activeUsersNames:
+					html += '<option value="' + extension[0]
+					if extension[0] in whitelistLogging:
+						html += '" selected="selected">'
+					else:
+						html += '">'
+					html += extension[0] + ": " + extension[1] + "</option>"
+			html += """
+						</select><br />
+						<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
 						</div>
-						<div class="form-group">
-							<input type="password" class="form-control" name="loadsecret" placeholder="Passphrase">
-						<div class="form-group">
-						<button type="submit" class="btn btn-warning" style="margin:5px;">Load</button>
 						</form>
-					</div></div></div></div>
-					<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-						<div class="panel-heading">Asterisk/FreePBX Config<br/>&nbsp;</div>
+						</div>
+					</div>"""
+			# Get all configured shared user and generate panel with all extensions to assign to the shared user
+			for sharedUser in sharedUsers:
+				html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+						<div class="panel-heading">Shared User: """ + activeUsers[sharedUser]['Username'] + """</div>
 						<div class="panel-body">
-						<form class="form-horizontal" role=" action="/" method="GET" >
-						  <div class="form-group">
-						    <label for="asterisk_host" class="col-sm-6 control-label">Host</label>
-						    <div class="col-sm-6">
-						      <input type="text" class="form-control" name="asterisk_host" id="asterisk_host" value=\"""" + str(asteriskAuth[0]) + """\" placeholder="hostname">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="asterisk_port" class="col-sm-6 control-label">Port</label>
-						    <div class="col-sm-6">
-						      <input type="text" class="form-control" id="asterisk_port" name="asterisk_port" value=\"""" + str(asteriskAuth[1]) + """\" placeholder="5038">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="asterisk_cmd_user" class="col-sm-6 control-label">CMD User</label>
-						    <div class="col-sm-6">
-						      <input type="text" class="form-control" id="asterisk_cmd_user" name="asterisk_cmd_user" value=\"""" + str(asteriskAuth[2]) + """\" placeholder="amicmd">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="asterisk_cmd_secret" class="col-sm-6 control-label">CMD Secret</label>
-						    <div class="col-sm-6">
-						      <input type="password" class="form-control" id="asterisk_cmd_secret" name="asterisk_cmd_secret" placeholder="Secret">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="asterisk_cdr_user" class="col-sm-6 control-label">CDR User</label>
-						    <div class="col-sm-6">
-						      <input type="text" class="form-control" id="asterisk_cdr_user" name="asterisk_cdr_user" value=\"""" + str(asteriskAuth[4]) + """\" placeholder="amicdr">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="asterisk_cdr_secret" class="col-sm-6 control-label">CDR Secret</label>
-						    <div class="col-sm-6">
-						      <input type="password" class="form-control" id="asterisk_cdr_secret" name="asterisk_cdr_secret" placeholder="Secret">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <div class="col-sm-offset-2 col-sm-10">
-						      <button type="submit" class="btn btn-primary">Update</button>
-						    </div>
-						  </div>
+						<form role="form" action="/" autocomplete="off" method="POST" >
+						<div class="form-group">
+						<select class="form-control" name=""" + '"' + sharedUser + '" multiple="multiple" style="height:300px;width=90%">'
+				extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
+				for extension in extensions:
+					html += '<option value="' + extension[0]
+					if extension[0] in sharedUsers[sharedUser]:
+						html += '" selected="selected">'
+					else:
+						html += '">'
+					html += extension[0] + ": " + extension[1] + "</option>"
+				html += """
+							</select><br />
+							<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
+							<a href="/?deleteUser=""" + sharedUser + """" class="btn btn-danger" style="margin:5px;" role="button">Delete User</a>
+							</div>
+							</form>
+							</div>
+						</div>"""
+			# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
+			html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+						<div class="panel-heading">Options<br/>&nbsp;</div>
+						<div class="panel-body" style="text-align:center">"""
+			if loggingEnabled:
+				html += '<a href="/?loggingEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging</a>'
+			else:
+				html += '<a href="/?loggingEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging</a>'
+			html += '<hr/>'
+			if unansweredEnabled:
+				html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>unanswered calls</a>'
+			else:
+				html += '<a href="/?unanswered=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>unanswered calls</a>'
+			if voicemailEnabled:
+				html += '<a href="/?voicemail=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable logging of<br/>voicemail</a>'
+			else:
+				html += '<a href="/?voicemail=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging of<br/>voicemail</a>'
+			html += """<hr/><form role="form" action="/" method="POST" >
+						<div class="form-group">
+						<select class="form-control" name="addUser">"""
+			usersForShared = sorted(activeUsers.iteritems(), key=lambda (k,v): v['Username']) # Sort users by Username
+			for user in usersForShared:
+				html += '<option value ="' + user[0] + '">' + user[1]['Username'] + "</option>"
+			html += """
+						</select>
+						<button type="submit" class="btn btn-success" style="margin:5px;">Add Shared User</button>
+						</div>
 						</form>
-					</div></div>
-					<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-						<div class="panel-heading">SalesForce Config<br/>&nbsp;</div>
-						<div class="panel-body">
-						<form class="form-horizontal" role=" action="/" method="GET" >
-						  <div class="form-group">
-						    <label for="sf_instance" class="col-sm-6 control-label">Instance</label>
-						    <div class="col-sm-6">
-						      <input type="text" class="form-control" name="sf_instance" id="sf_instance" value=\"""" + str(salesforceAuth[0]) + """\" placeholder="in1.salesforce.com">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="sf_username" class="col-sm-6 control-label">User</label>
-						    <div class="col-sm-6">
-						      <input type="text" class="form-control" id="sf_username" name="sf_username" value=\"""" + str(salesforceAuth[1]) + """\" placeholder="user@ema.il">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="sf_password" class="col-sm-6 control-label">Password</label>
-						    <div class="col-sm-6">
-						      <input type="password" class="form-control" id="sf_password" name="sf_password" placeholder="Password">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <label for="sf_token" class="col-sm-6 control-label">Token</label>
-						    <div class="col-sm-6">
-						      <input type="password" class="form-control" id="sf_token" name="sf_token" value=\"""" + str(salesforceAuth[3]) + """\" placeholder="Token">
-						    </div>
-						  </div>
-						  <div class="form-group">
-						    <div class="col-sm-offset-2 col-sm-10">
-						      <button type="submit" class="btn btn-primary">Update</button>
-						    </div>
-						  </div>
-						</form>
-					</div></div>
-					</div>
-					</body>
-				</html>
-				"""
-				self.wfile.write(bytes(html))
-		
-		logging.info("Time taken for request: " + str(time.time() - starttime))
+				</div></div>"""
+
+		html += """	<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+				<div class="panel-heading">Load/Save Config<br/>&nbsp;</div>
+				<div class="panel-body" style="text-align:center">
+				<form class="form" role=" action="/" method="POST" >
+				  <div class="form-group">
+				      <input type="text" class="form-control" name="savename" placeholder="Name">
+				  </div>
+				  <div class="form-group">
+				      <input type="password" class="form-control" name="savesecret" placeholder="Passphrase">
+				  </div>
+				  <div class="form-group">
+				  	<button type="submit" class="btn btn-warning" style="margin:5px;">Save</button>
+				  </div>
+				</form>
+				<hr/><form role="form" action="/" method="POST" >
+				<div class="form-group">
+				<select class="form-control" name="loadname">"""
+		for name in getSavedConfigs():
+			html += '<option value ="' + name + '">' + name + "</option>"
+		html += """
+				</select>
+				</div>
+				<div class="form-group">
+					<input type="password" class="form-control" name="loadsecret" placeholder="Passphrase">
+				<div class="form-group">
+				<button type="submit" class="btn btn-warning" style="margin:5px;">Load</button>
+				</form>
+			</div></div></div></div>
+			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+				<div class="panel-heading">Asterisk/FreePBX Config<br/>&nbsp;</div>
+				<div class="panel-body">
+				<form class="form-horizontal" role=" action="/" method="POST" >
+				  <div class="form-group">
+				    <label for="asterisk_host" class="col-sm-6 control-label">Host</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" name="asterisk_host" id="asterisk_host" value=\"""" + str(asteriskAuth[0]) + """\" placeholder="hostname">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="asterisk_port" class="col-sm-6 control-label">Port</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="asterisk_port" name="asterisk_port" value=\"""" + str(asteriskAuth[1]) + """\" placeholder="5038">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="asterisk_cmd_user" class="col-sm-6 control-label">CMD User</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="asterisk_cmd_user" name="asterisk_cmd_user" value=\"""" + str(asteriskAuth[2]) + """\" placeholder="amicmd">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="asterisk_cmd_secret" class="col-sm-6 control-label">CMD Secret</label>
+				    <div class="col-sm-6">
+				      <input type="password" class="form-control" id="asterisk_cmd_secret" name="asterisk_cmd_secret" placeholder="Secret">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="asterisk_cdr_user" class="col-sm-6 control-label">CDR User</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="asterisk_cdr_user" name="asterisk_cdr_user" value=\"""" + str(asteriskAuth[4]) + """\" placeholder="amicdr">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="asterisk_cdr_secret" class="col-sm-6 control-label">CDR Secret</label>
+				    <div class="col-sm-6">
+				      <input type="password" class="form-control" id="asterisk_cdr_secret" name="asterisk_cdr_secret" placeholder="Secret">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <div class="col-sm-offset-2 col-sm-10">
+				      <button type="submit" class="btn btn-primary">Update</button>
+				    </div>
+				  </div>
+				</form>
+			</div></div>
+			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+				<div class="panel-heading">SalesForce Config<br/>&nbsp;</div>
+				<div class="panel-body">
+				<form class="form-horizontal" role=" action="/" method="POST" >
+				  <div class="form-group">
+				    <label for="sf_instance" class="col-sm-6 control-label">Instance</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" name="sf_instance" id="sf_instance" value=\"""" + str(salesforceAuth[0]) + """\" placeholder="in1.salesforce.com">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="sf_username" class="col-sm-6 control-label">User</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="sf_username" name="sf_username" value=\"""" + str(salesforceAuth[1]) + """\" placeholder="user@ema.il">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="sf_password" class="col-sm-6 control-label">Password</label>
+				    <div class="col-sm-6">
+				      <input type="password" class="form-control" id="sf_password" name="sf_password" placeholder="Password">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="sf_token" class="col-sm-6 control-label">Token</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="sf_token" name="sf_token" value=\"""" + str(salesforceAuth[3]) + """\" placeholder="Token">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <div class="col-sm-offset-2 col-sm-10">
+				      <button type="submit" class="btn btn-primary">Update</button>
+				    </div>
+				  </div>
+				</form>
+			</div></div>
+			</div>
+			</body>
+		</html>
+		"""
+		return html
 
 	def log_request(self, code=None, size=None):
 		"""
@@ -936,7 +993,6 @@ def mainloop():
 													logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 													logging.info("\tLogging Call in SalesForce...")
 													createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
-
 											else:
 												logging.info("\tNo associated SalesForce user found.")
 										else:
@@ -1020,7 +1076,7 @@ if __name__ == "__main__":
 	try:
 		port = int(port)
 	except:
-		port = 8008
+		port = 8000
 	try:
 		logging.info("Trying to load config from " + configfile)
 

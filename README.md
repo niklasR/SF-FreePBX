@@ -78,7 +78,7 @@ Please note that the configs are encrypted by default - so please make sure you 
 
 ##Security
 
-Bear in mind that the connection between SF-FreePBX and Asterisk is plaintext, so binding the AMI users to a specific machine, tunneling the traffic or runninf SF-FreePBX on the Asterisk-Server is recommended.
+Bear in mind that the connection between SF-FreePBX and Asterisk is plaintext, so binding the AMI users to a specific machine, tunneling the traffic or running SF-FreePBX on the Asterisk-Server is recommended.
 
 ## Extensions
 If you would like to build on the code provided, here's an overview of the functions (despite the webserver)
