@@ -975,7 +975,7 @@ def updateSF(salesforceAuth):
 def isAstValid(asteriskAuth):
 	try:
 		# Validate CMD user
-		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
+		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1], 10)
 		tnTest.read_until("Asterisk Call Manager/1.1")
 		tnTest.write("Action: Login\nUsername: " + asteriskAuth[2] + "\nSecret: " + asteriskAuth[3] + "\n\n")
 
@@ -988,7 +988,7 @@ def isAstValid(asteriskAuth):
 		tnTest.close()
 
 		# Validate CDR user
-		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
+		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1], 10)
 		tnTest.read_until("Asterisk Call Manager/1.1")
 		tnTest.write("Action: Login\nUsername: " + asteriskAuth[4] + "\nSecret: " + asteriskAuth[5] + "\n\n")
 
