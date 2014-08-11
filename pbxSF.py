@@ -135,13 +135,18 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				elif qs['loggingEnabled'][0] == 'enable':
 					loggingEnabled = True
 
-			# Generate webpage
-			# Send HTTP 200 Header
-			self.send_response(200, 'OK')
-			self.send_header('Content-type', 'text/html')
-			self.end_headers()
+			if len(qs) > 0: # if any GET argumentst
+				self.send_response(302)
+				self.send_header("Location", "/")
+				self.end_headers()
+			else:
+				# Generate webpage
+				# Send HTTP 200 Header
+				self.send_response(200, 'OK')
+				self.send_header('Content-type', 'text/html')
+				self.end_headers()
 
-			self.wfile.write(bytes(self.generateHTML()))
+				self.wfile.write(bytes(self.generateHTML()))
 			
 		logging.info("Time taken for request: " + str(time.time() - starttime))
 
