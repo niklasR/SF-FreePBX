@@ -299,6 +299,19 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				logging.warning("Only parts of SMTP auth received.")
 				showMessage.add("Please enter all data associated with the email address you would like to use.")
 
+			if 'httpUser' in qs and 'httpPassword' in qs and 'httpPasswordConfirm' in qs:
+				if qs['httpPassword'][0] == qs['httpPasswordConfirm'][0]:
+					authKey = base64.b64encode(qs['httpUser'][0] + ":" + qs['httpPassword'][0])
+					logging.info("HTTP passwords updated.")
+					showMessage.add("Login updated.")
+				else:
+					logging.warning("HTTP passwords don't match for update.")
+					showMessage.add("Passwords don't match.")					
+			elif 'httpUser' in qs or 'httpPassword' in qs:
+				logging.warning("Only parts of new HTTP auth received.")
+				showMessage.add("Please enter username and password to update the log-in.")				
+
+
 			# Add Shared User
 			if 'addUser' in qs:
 				for userId in qs['addUser']:
@@ -585,6 +598,36 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				    <label for="email_password" class="col-sm-6 control-label">Password</label>
 				    <div class="col-sm-6">
 				      <input type="password" class="form-control" id="email_password" name="email_password" placeholder="Password">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <div class="col-sm-offset-2 col-sm-10">
+				      <button type="submit" class="btn btn-primary">Update</button>
+				    </div>
+				  </div>
+				</form>
+			</div></div>
+
+			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+				<div class="panel-heading">HTTP Authentication<br/><small>For Webinterface</small></div>
+				<div class="panel-body">
+				<form class="form-horizontal" role=" action="/" method="POST" >
+				  <div class="form-group">
+				    <label for="httpUser" class="col-sm-6 control-label">Username</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" id="httpUser" name="httpUser" placeholder="Username">
+				    </div>
+				  </div>
+				  <div class="form-group">
+				    <label for="httpPassword" class="col-sm-6 control-label">Password</label>
+				    <div class="col-sm-6">
+				      <input type="password" class="form-control" id="httpPassword" name="httpPassword" placeholder="Password">
+				    </div>
+				  </div>
+				 <div class="form-group" style="margin-bottom:162px">
+				    <label for="httpPasswordConfirm" class="col-sm-6 control-label">Confirm</label>
+				    <div class="col-sm-6">
+				      <input type="password" class="form-control" id="httpPasswordConfirm" name="httpPasswordConfirm" placeholder="Confirm Password ">
 				    </div>
 				  </div>
 				  <div class="form-group">
@@ -1162,12 +1205,6 @@ if __name__ == "__main__":
 	global smtpAuth
 	global smtpValid
 	global emailEnabled
-	
-	try:
-		authKey = base64.b64encode(USERNAME + ":" + PASSWORD)
-	except:
-		logging.warning("Not authentication for HTTP set.")
-
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],"hp:f:s:",["help","port=","configfile=","secret="])
