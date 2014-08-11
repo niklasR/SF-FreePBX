@@ -774,9 +774,9 @@ def getNumberTerm(phonenumber):
 	Returns wildcarded version of phonenumber.
 	Strips +/00 off of the beginning, and the next two digits to account for country codes
 	'''
-	# Strip + or 00 or 0 off of phone number
-	number = phonenumber.strip('+')
-	number = number.strip('00') 
+	# Strip + or 00 or 0 off of the beginning of the phone number
+	number = phonenumber.lstrip('+')
+	number = number.lstrip('00') 
 	# Strip first 2 digits of phone number in case the CID (caller provider specific) includes a country code
 	number = number[2:len(number)]
 	term = '%' # searchterm for salesfore SQOL
@@ -875,7 +875,7 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 		lastAPIconnection = time.time()
 		logging.info("\tCall logged. Task Id: " + str(task['id']) + ".")
 		if emailEnabled:
-			sendEmail(userId, task['id'], smtpAuth)
+			sendEmail(userId, task['id'], smtpAuth) # Does not take into account shared Accounts.
 			logging.info("\tEmail sent.")
 
 	else:
