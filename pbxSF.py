@@ -441,7 +441,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		html += """	<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">Load/Save Config<br/>&nbsp;</div>
 				<div class="panel-body" style="text-align:center">
-				<form class="form" role=" action="/" method="POST" >
+				<form class="form" role="form" action="/" method="POST" >
 				  <div class="form-group">
 				      <input type="text" class="form-control" name="savename" placeholder="Name">
 				  </div>
@@ -452,7 +452,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				  	<button type="submit" class="btn btn-warning" style="margin:5px;">Save</button>
 				  </div>
 				</form>
-				<hr/><form role="form" action="/" method="POST" >
+				<hr/><form class="form" role="form" action="/" method="POST" >
 				<div class="form-group">
 				<select class="form-control" name="loadname">"""
 		for name in getSavedConfigs():
@@ -462,10 +462,11 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				</div>
 				<div class="form-group">
 					<input type="password" class="form-control" name="loadsecret" placeholder="Passphrase">
+				</div>
 				<div class="form-group">
 				<button type="submit" class="btn btn-warning" style="margin:5px;">Load</button>
 				</form>
-			</div></div></div></div>
+			</div></div></div>
 			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">Asterisk/FreePBX Config<br/>&nbsp;</div>
 				<div class="panel-body">
