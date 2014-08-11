@@ -13,10 +13,10 @@ class server(threading.Thread):
         threading.Thread.__init__(self)
     def run(self):
     	# if certificate exists, start as SSL
-        if os.path.isfile(os.path.join(os.path.join(os.path.dirname(__file__)), 'server.pem')):
+        if os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem')):
         	httpd = BaseHTTPServer.HTTPServer(("", port), MyHandler)
         	logging.info("SERVER started with SSL. Connect with https://<localhost>:" + str(port))
-        	httpd.socket = ssl.wrap_socket (httpd.socket, certfile=os.path.join(os.path.join(os.path.dirname(__file__)), 'server.pem'), server_side=True) # certfile needs to include private key and certificate
+        	httpd.socket = ssl.wrap_socket (httpd.socket, certfile=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem'), server_side=True) # certfile needs to include private key and certificate
         else:
         	httpd = SocketServer.TCPServer(("", port), MyHandler)
         	logging.info("SERVER started. Connect with http://<localhost>:" + str(port))
@@ -667,7 +667,7 @@ def saveData(data, filename, passphrases):
 	"""
 	encoder = encryptedpickle.EncryptedPickle(signature_passphrases=passphrases, encryption_passphrases=passphrases)
 
-	datafile = open(os.path.join(os.path.join(os.path.dirname(__file__)), str(filename)), 'wb')
+	datafile = open(os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__))), str(filename)), 'wb')
 	pickle.dump(encoder.seal(data), datafile)
 
 def loadData(filename, passphrase):
@@ -677,7 +677,7 @@ def loadData(filename, passphrase):
 	passphrases = {0: passphrase}
 	encoder = encryptedpickle.EncryptedPickle(signature_passphrases=passphrases, encryption_passphrases=passphrases)
 
-	fname = os.path.join(os.path.join(os.path.dirname(__file__)), str(filename))
+	fname = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__))), str(filename))
 	if os.path.isfile(fname):
 		datafile = open(fname, 'rb')
 		try:
@@ -1016,7 +1016,7 @@ def sendEmail(userId, taskId, smtpAuth):
 	msg['From'] = smtpAuth[2]
 	msg['To'] = sf.User.get(userId)['Email']
 	msg['Subject'] = 'Your call with ' + sf.Account.get(sf.Task.get(taskId)['WhatId'])['Name'] + '.'
-	body = "Hi " + sf.User.get(userId)['FirstName'] + ",\nyou have just finished a call which has been logged in SalesForce.\n\nPlease update the entry with details about the call: http://" + salesforceAuth[0] + "/" + taskId + "/e."
+	body = "Hi " + sf.User.get(userId)['FirstName'] + ",\nyou have just finished a call which has been logged in SalesForce.\n\nPlease update the entry with details about the call: http://" + salesforceAuth[0] + "/" + taskId + "/e.\n\n---- THIS IS AN AUTOMATICALLY GENERATED MESSAGE. ----"
 
 	msg.attach(MIMEText(body, 'plain'))	
 	server.sendmail(smtpAuth[2], msg['To'], msg.as_string())
