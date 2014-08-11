@@ -53,6 +53,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global voicemailEnabled
 		global unansweredEnabled
 		global loggingEnabled
+		global emailEnabled
 
 		# Time request
 		starttime = time.time()
@@ -113,6 +114,13 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				elif qs['unanswered'][0] == 'enable':
 					unansweredEnabled = True
 
+			# Enable/Disable sending emails
+			if 'emailEnabled' in qs:
+				if qs['emailEnabled'][0] == 'disable':
+					emailEnabled = False
+				elif qs['emailEnabled'][0] == 'enable':
+					emailEnabled = True
+
 			# Enable/Disable logging of calls gone to voicemail
 			if 'voicemail' in qs:
 				if qs['voicemail'][0] == 'disable':
@@ -155,6 +163,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global asteriskUpdated
 		global smtpValid
 		global smtpAuth
+		global emailEnabled
 
 		# Time request
 		starttime = time.time()
@@ -224,7 +233,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Save config (encrypted)
 			if ('savename' in qs) and ('savesecret' in qs):
 				if len(qs['savesecret'][0]) >= 8:
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
+					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid, emailEnabled), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
 					logging.info("Config saved as " + qs['savename'][0] + ".epk")
 					showMessage.add("Config saved as '" + qs['savename'][0] + "'.")
 				else:
@@ -235,7 +244,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			if ('loadname' in qs) and ('loadsecret' in qs):
 				data = loadData(qs['loadname'][0] + ".epk", qs['loadsecret'][0]*4)
 				if data:
-					if len(data) == 12:
+					if len(data) == 13:
 						sharedUsers = data[0]
 						whitelistLogging = data[1]
 						unansweredEnabled = data[2]
@@ -247,6 +256,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						astValid = data[8]
 						smtpAuth = data[10]
 						smtpValid = data[11]
+						emailEnabled = data[12]
 						updateSF(salesforceAuth)
 						showMessage.add("Config loaded succesfully.")
 						logging.info("Config loaded from file: " + qs['loadname'][0])
@@ -315,6 +325,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global unansweredEnabled
 		global loggingEnabled
 		global voicemailEnabled
+		global emailEnabled
 		global showMessage
 		global sfValid
 		global asteriskAuth
@@ -539,8 +550,12 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			</div></div>
 			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">Email Config<br/>&nbsp;</div>
-				<div class="panel-body">
-				<form class="form-horizontal" role=" action="/" method="POST" >
+				<div class="panel-body">"""
+		if emailEnabled:
+			html += '<a href="/?emailEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable Email</a>'
+		else:
+			html += '<a href="/?emailEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable Email</a>'
+		html += """<form class="form-horizontal" role=" action="/" method="POST" >
 				  <div class="form-group">
 				    <label for="email_server" class="col-sm-6 control-label">Host</label>
 				    <div class="col-sm-6">
@@ -795,6 +810,7 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 	Creates new, completed "Call" task in SalesForce to show up in the account's Activity History
 	'''
 	global smtpAuth
+	global emailEnabled
 	if loggingEnabled:
 		task = sf.Task.create({
 			'Type':'Called',
@@ -811,8 +827,9 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 			})
 		lastAPIconnection = time.time()
 		logging.info("\tCall logged. Task Id: " + str(task['id']) + ".")
-		sendEmail(userId, task['id'], smtpAuth)
-		logging.info("\tEmail sent.")
+		if emailEnabled:
+			sendEmail(userId, task['id'], smtpAuth)
+			logging.info("\tEmail sent.")
 
 	else:
 		logging.info("\t------")
@@ -947,7 +964,7 @@ def sendEmail(userId, taskId, smtpAuth):
 	msg['From'] = smtpAuth[2]
 	msg['To'] = sf.User.get(userId)['Email']
 	msg['Subject'] = 'Your call with ' + sf.Account.get(sf.Task.get(taskId)['WhatId'])['Name'] + '.'
-	body = "Hi " + sf.User.get(userId)['FirstName'] + ",\nyou have just finished a call which has been logged in SalesForce.\n\nPlease update the entry with details about the call: http://" + salesforceAuth[0] + "/" + taskId
+	body = "Hi " + sf.User.get(userId)['FirstName'] + ",\nyou have just finished a call which has been logged in SalesForce.\n\nPlease update the entry with details about the call: http://" + salesforceAuth[0] + "/" + taskId + "/e."
 
 	msg.attach(MIMEText(body, 'plain'))	
 	server.sendmail(smtpAuth[2], msg['To'], msg.as_string())
@@ -1143,6 +1160,7 @@ if __name__ == "__main__":
 	global astValid
 	global smtpAuth
 	global smtpValid
+	global emailEnabled
 	
 	try:
 		authKey = base64.b64encode(USERNAME + ":" + PASSWORD)
@@ -1200,6 +1218,7 @@ if __name__ == "__main__":
 		sFValid = data[9]
 		smtpAuth = data[10]
 		smtpValid = data[11]
+		emailEnabled = data[12]
 		updateSF(salesforceAuth)
 
 		dataLoaded = True
@@ -1221,6 +1240,7 @@ if __name__ == "__main__":
 		sfValid = False
 		smtpValid = False
 		astValid = False
+		emailEnabled = False
 
 	showMessage = set()
 
