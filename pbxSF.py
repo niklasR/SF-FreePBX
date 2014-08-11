@@ -54,6 +54,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global unansweredEnabled
 		global loggingEnabled
 		global emailEnabled
+		global sharedUsers
 
 		# Time request
 		starttime = time.time()
@@ -134,6 +135,16 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					loggingEnabled = False
 				elif qs['loggingEnabled'][0] == 'enable':
 					loggingEnabled = True
+
+			# Delete Shared User
+			if 'deleteUser' in qs:
+				logging.info("Deleting shared User")
+				for userId in qs['deleteUser']:
+					if userId in sharedUsers:
+						del sharedUsers[userId]
+						showMessage.add("Shared User deleted.")
+					else:
+						logging.warning("UserId no found in sharedUsers")
 
 			if len(qs) > 0: # if any GET argumentst
 				self.send_response(302)
@@ -227,13 +238,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Update active extensions
 			if 'whitelist' in qs:
 				whitelistLogging = tuple(qs['whitelist'])
-
-			# Delete Shared User
-			if 'deleteUser' in qs:
-				for userId in qs['deleteUser']:
-					if userId in sharedUsers:
-						del sharedUsers[userId]
-						showMessage.add("Shared User deleted.")
 
 			# Save config (encrypted)
 			if ('savename' in qs) and ('savesecret' in qs):
@@ -1046,143 +1050,146 @@ def mainloop():
 				if asteriskUpdated:
 					asteriskUpdated = False
 					break
-				data = tn_cdr.read_very_eager()
-				if len(data) > 0:
-					events = data.split("\r\n\r\n")
-					for event in events:
-						if str(getEventFieldValue('Event', event)) == 'Cdr':
-							logging.info("CDR logged:")
-							# Inbound calls to Extension
-							if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
-								logging.info("\tInbound")
-								if isLoggingEnabled(getEventFieldValue('Destination', event)):
-									# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
-									if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
-										if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailEnabled):
+				if (astValid and sfValid):
+					data = tn_cdr.read_very_eager()
+					if len(data) > 0:
+						events = data.split("\r\n\r\n")
+						for event in events:
+							if str(getEventFieldValue('Event', event)) == 'Cdr':
+								logging.info("CDR logged:")
+								# Inbound calls to Extension
+								if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
+									logging.info("\tInbound")
+									if isLoggingEnabled(getEventFieldValue('Destination', event)):
+										# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
+										if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
+											if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailEnabled):
 
-											# Check if extension is saved as shared User in config
-											salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
-											# If not saved, check if extension matches any SalesForce user
-											if not salesforceUser:
-												localName = getAllExtensions()[getEventFieldValue('Destination', event)]
-												if localName:
-													salesforceUser = getUserId(str(localName))
-											# If SalesForce user matched via either of the above, proceed recordings.
-											if salesforceUser:
-												# check for number of contacts with SRC number and take action based on that:
-												#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
-												#		0: no match -> no log
-												#		1: exact match -> log with account
-												#		2: no exact match -> don't log
-												#	1: Log call with that contact
-												numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
+												# Check if extension is saved as shared User in config
+												salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
+												# If not saved, check if extension matches any SalesForce user
+												if not salesforceUser:
+													localName = getAllExtensions()[getEventFieldValue('Destination', event)]
+													if localName:
+														salesforceUser = getUserId(str(localName))
+												# If SalesForce user matched via either of the above, proceed recordings.
+												if salesforceUser:
+													# check for number of contacts with SRC number and take action based on that:
+													#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+													#		0: no match -> no log
+													#		1: exact match -> log with account
+													#		2: no exact match -> don't log
+													#	1: Log call with that contact
+													numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
 
-												if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-													numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
-													if (numberOfAccounts == 0):
-														logging.info("\tNo associated SalesForce account found.")
-													elif(numberOfAccounts == 1):
+													if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+														numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
+														if (numberOfAccounts == 0):
+															logging.info("\tNo associated SalesForce account found.")
+														elif(numberOfAccounts == 1):
+															salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+															logging.info("\tSRC: " + getEventFieldValue('Source', event))
+															logging.info("\tSFA: " + salesforceAccount)
+															logging.info("\tDST: " + getEventFieldValue('Destination', event))
+															logging.info("\tSFU: " + salesforceUser)
+															logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+															logging.info("\tLogging Call in SalesForce...")
+															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
+															logging.info("\tLogged.")
+														elif(numberOfAccounts > 1):
+															logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+													else: # exact contact salesforceAccountc
 														salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+														salesforceContact = getContactId(getEventFieldValue('Source', event))
 														logging.info("\tSRC: " + getEventFieldValue('Source', event))
 														logging.info("\tSFA: " + salesforceAccount)
+														logging.info("\tSFC: " + salesforceContact)
 														logging.info("\tDST: " + getEventFieldValue('Destination', event))
 														logging.info("\tSFU: " + salesforceUser)
 														logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 														logging.info("\tLogging Call in SalesForce...")
-														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
-														logging.info("\tLogged.")
-													elif(numberOfAccounts > 1):
-														logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-												else: # exact contact salesforceAccountc
-													salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-													salesforceContact = getContactId(getEventFieldValue('Source', event))
-													logging.info("\tSRC: " + getEventFieldValue('Source', event))
-													logging.info("\tSFA: " + salesforceAccount)
-													logging.info("\tSFC: " + salesforceContact)
-													logging.info("\tDST: " + getEventFieldValue('Destination', event))
-													logging.info("\tSFU: " + salesforceUser)
-													logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-													logging.info("\tLogging Call in SalesForce...")
-													createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
+														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
 
+												else:
+													logging.info("\tNo associated SalesForce user found.")
 											else:
-												logging.info("\tNo associated SalesForce user found.")
+												logging.info("\tCalls to voicemail not logged.")
 										else:
-											logging.info("\tCalls to voicemail not logged.")
+											logging.info("\tUnanswered calls not logged.")
 									else:
-										logging.info("\tUnanswered calls not logged.")
-								else:
-									logging.info("\tLogging not enabled for this extension.")
+										logging.info("\tLogging not enabled for this extension.")
 
-							# Call From Internal
-							elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
-								logging.info("\tFrom Internal")
-								if isLoggingEnabled(getEventFieldValue('Source', event)):
-									# check whether the call has NOT been answered and if so, whether the extension has logging of unsanwered calls enabled
-									if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
-										if (len(str(getEventFieldValue('Destination', event))) > 4):
-											# Check if extension is saved as shared User in config
-											salesforceUser = getSharedUser(getEventFieldValue('Source', event))
-											# If not saved, check if extension matches any SalesForce user
-											if not salesforceUser:
-												localName = getAllExtensions()[getEventFieldValue('Source', event)]
-												if localName:
-													salesforceUser = getUserId(str(localName))
-											# If SalesForce user matched via either of the above, proceed recordings.
-											if salesforceUser:
-												# check for number of contacts with DST number and take action based on that:
-												#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
-												#		0: no match -> no log
-												#		1: exact match -> log with account
-												#		2: no exact match -> don't log
-												#	1: Log call with that contact
-												numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
-												if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-													numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
-													if (numberOfAccounts == 0):
-														logging.info("\tNo associated SalesForce account found.")
-													elif(numberOfAccounts == 1):
+								# Call From Internal
+								elif str(getEventFieldValue('DestinationContext', event)) == 'from-internal':
+									logging.info("\tFrom Internal")
+									if isLoggingEnabled(getEventFieldValue('Source', event)):
+										# check whether the call has NOT been answered and if so, whether the extension has logging of unsanwered calls enabled
+										if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
+											if (len(str(getEventFieldValue('Destination', event))) > 4):
+												# Check if extension is saved as shared User in config
+												salesforceUser = getSharedUser(getEventFieldValue('Source', event))
+												# If not saved, check if extension matches any SalesForce user
+												if not salesforceUser:
+													localName = getAllExtensions()[getEventFieldValue('Source', event)]
+													if localName:
+														salesforceUser = getUserId(str(localName))
+												# If SalesForce user matched via either of the above, proceed recordings.
+												if salesforceUser:
+													# check for number of contacts with DST number and take action based on that:
+													#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+													#		0: no match -> no log
+													#		1: exact match -> log with account
+													#		2: no exact match -> don't log
+													#	1: Log call with that contact
+													numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
+													if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+														numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
+														if (numberOfAccounts == 0):
+															logging.info("\tNo associated SalesForce account found.")
+														elif(numberOfAccounts == 1):
+															salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+															logging.info("\tSRC: " + getEventFieldValue('Source', event))
+															logging.info("\tSFA: " + salesforceAccount)
+															logging.info("\tDST: " + getEventFieldValue('Destination', event))
+															logging.info("\tSFU: " + salesforceUser)
+															logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+															logging.info("\tLogging Call in SalesForce...")
+															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
+															logging.info("\tLogged.")
+														elif(numberOfAccounts > 1):
+															logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+													else: # exact contact match
 														salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+														salesforceContact = getContactId(getEventFieldValue('Destination', event))
 														logging.info("\tSRC: " + getEventFieldValue('Source', event))
 														logging.info("\tSFA: " + salesforceAccount)
+														logging.info("\tSFC: " + salesforceContact)
 														logging.info("\tDST: " + getEventFieldValue('Destination', event))
 														logging.info("\tSFU: " + salesforceUser)
 														logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 														logging.info("\tLogging Call in SalesForce...")
-														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
-														logging.info("\tLogged.")
-													elif(numberOfAccounts > 1):
-														logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-												else: # exact contact match
-													salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-													salesforceContact = getContactId(getEventFieldValue('Destination', event))
-													logging.info("\tSRC: " + getEventFieldValue('Source', event))
-													logging.info("\tSFA: " + salesforceAccount)
-													logging.info("\tSFC: " + salesforceContact)
-													logging.info("\tDST: " + getEventFieldValue('Destination', event))
-													logging.info("\tSFU: " + salesforceUser)
-													logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-													logging.info("\tLogging Call in SalesForce...")
-													createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
+														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
+												else:
+													logging.info("\tNo associated SalesForce user found.")
 											else:
-												logging.info("\tNo associated SalesForce user found.")
+												logging.info("\tExtension dialled.")
 										else:
-											logging.info("\tExtension dialled.")
+											logging.info("\tUnanswered calls not logged.")
 									else:
-										logging.info("\tUnanswered calls not logged.")
+										logging.info("\tLogging not enabled for this extension.")
 								else:
-									logging.info("\tLogging not enabled for this extension.")
-							else:
-								logging.info("\t" + str(getEventFieldValue('DestinationContext', event)))
+									logging.info("\t" + str(getEventFieldValue('DestinationContext', event)))
 
-				# if last API call to SF older than 9 minutes make new API call to avoid session timeout
-				if ((time.time()-(lastAPIconnection)) > (60*9)):
-					logging.info("Making dummy API call to avoid SF session timeout...")
-					sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
-					lastAPIconnection = time.time()
-					logging.info("API call made.")
-				
-				time.sleep(5)
+					# if last API call to SF older than 9 minutes make new API call to avoid session timeout
+					if ((time.time()-(lastAPIconnection)) > (60*9)):
+						logging.info("Making dummy API call to avoid SF session timeout...")
+						sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
+						lastAPIconnection = time.time()
+						logging.info("API call made.")
+					
+					time.sleep(5)
+				else:
+					break
 		else:
 			time.sleep(1)
 
