@@ -273,6 +273,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						showMessage.add("Config could not be loaded: Format incompatible.")
 				else:
 					showMessage.add("Config could not be loaded: File not found or passphrase wrong.")
+			elif ('loadname' in qs):
+				showMessage.add("Please enter passphrase.")
 
 			# Update Asterisk Data
 			if 'asterisk_cdr_secret' in qs and 'asterisk_cdr_user' in qs and 'asterisk_host' in qs and 'asterisk_port' in qs and 'asterisk_cmd_user' in qs and 'asterisk_cmd_secret' in qs:
@@ -619,30 +621,19 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
 			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">HTTP Authentication<br/><small>For Webinterface</small></div>
-				<div class="panel-body">
-				<form class="form-horizontal" role=" action="/" method="POST" >
+				<div class="panel-body" style="text-align:center">
+				<form class="form" action="/" method="POST" >
 				  <div class="form-group">
-				    <label for="httpUser" class="col-sm-6 control-label">Username</label>
-				    <div class="col-sm-6">
 				      <input type="text" class="form-control" id="httpUser" name="httpUser" placeholder="Username">
-				    </div>
 				  </div>
 				  <div class="form-group">
-				    <label for="httpPassword" class="col-sm-6 control-label">Password</label>
-				    <div class="col-sm-6">
 				      <input type="password" class="form-control" id="httpPassword" name="httpPassword" placeholder="Password">
-				    </div>
 				  </div>
 				 <div class="form-group" style="margin-bottom:162px">
-				    <label for="httpPasswordConfirm" class="col-sm-6 control-label">Confirm</label>
-				    <div class="col-sm-6">
 				      <input type="password" class="form-control" id="httpPasswordConfirm" name="httpPasswordConfirm" placeholder="Confirm Password ">
-				    </div>
 				  </div>
 				  <div class="form-group">
-				    <div class="col-sm-offset-2 col-sm-10">
 				      <button type="submit" class="btn btn-primary">Update</button>
-				    </div>
 				  </div>
 				</form>
 			</div></div>
@@ -770,9 +761,12 @@ def getUserId(fullName):
 
 def getSavedConfigs():
 	filenames = set()
-	for file in os.listdir(os.path.dirname(__file__)):
-		if file.endswith(".epk"):
-			filenames.add(file[:-4])
+	try:
+		for file in os.listdir(os.path.dirname(os.path.abspath(__file__))):
+			if file.endswith(".epk"):
+				filenames.add(file[:-4])
+	except:
+		logging.error("Could not list dir")
 	return filenames
 
 def getNumberTerm(phonenumber):
@@ -1010,8 +1004,13 @@ def isAstValid(asteriskAuth):
 
 def sendEmail(userId, taskId, smtpAuth):
 	global salesforceAuth
+	global showMessage
 	server = smtplib.SMTP_SSL(host=smtpAuth[0], port=int(smtpAuth[1]))
-	server.login(smtpAuth[3], smtpAuth[4])
+	try:
+		server.login(smtpAuth[3], smtpAuth[4])
+	except:
+		logging.warning("Could not sent email; check SMTP log-in.")
+		showMessage.add("Please update the email config; the data seems to be incorrect!")
 
 	msg = MIMEMultipart()
 	msg['From'] = smtpAuth[2]
