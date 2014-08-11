@@ -535,7 +535,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				      <input type="password" class="form-control" id="sf_password" name="sf_password" placeholder="Password">
 				    </div>
 				  </div>
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:113px">
 				    <label for="sf_token" class="col-sm-6 control-label">Token</label>
 				    <div class="col-sm-6">
 				      <input type="text" class="form-control" id="sf_token" name="sf_token" value=\"""" + str(salesforceAuth[3]) + """\" placeholder="Token">
