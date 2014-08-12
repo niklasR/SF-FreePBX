@@ -834,31 +834,35 @@ def getAccountId(phonenumber):
 	if (len(results) == 1): # return ID of only match
 		return results[0]['Id']
 	else:
-		# No Account found, looking for contacts
-		results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "'")["records"]
-		lastAPIconnection = time.time()
-		if (len(results) == 1): # return ID of only match
-			return results[0]['AccountId']
-		elif (len(results) == 0):
-			# No Contact found; looking for mobiles
-			results = sf.query_all("SELECT AccountId FROM Contact WHERE MobilePhone LIKE '" + term + "'")["records"]
+		try:
+			# No Account found, looking for contacts
+			results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "'")["records"]
 			lastAPIconnection = time.time()
 			if (len(results) == 1): # return ID of only match
 				return results[0]['AccountId']
+			elif (len(results) == 0):
+				# No Contact found; looking for mobiles
+				results = sf.query_all("SELECT AccountId FROM Contact WHERE MobilePhone LIKE '" + term + "'")["records"]
+				lastAPIconnection = time.time()
+				if (len(results) == 1): # return ID of only match
+					return results[0]['AccountId']
+				else: # if multiple results, check if they belong to the same account
+					accountId = results[0]['AccountId']
+					for contact in results:
+						if contact['AccountId'] != accountId:
+							logging.warning("No unique account found")
+							return None
+					return accountId	
 			else: # if multiple results, check if they belong to the same account
 				accountId = results[0]['AccountId']
 				for contact in results:
 					if contact['AccountId'] != accountId:
 						logging.warning("No unique account found")
 						return None
-				return accountId	
-		else: # if multiple results, check if they belong to the same account
-			accountId = results[0]['AccountId']
-			for contact in results:
-				if contact['AccountId'] != accountId:
-					logging.warning("No unique account found")
-					return None
-			return accountId
+				return accountId
+		except:
+			logging.warning("No unique account found")
+			return None
 
 def getContactId(phonenumber):
 	'''
@@ -1099,36 +1103,38 @@ def mainloop():
 													#		1: exact match -> log with account
 													#		2: no exact match -> don't log
 													#	1: Log call with that contact
-													numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
+													try:
+														numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
 
-													if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-														numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
-														if (numberOfAccounts == 0):
-															logging.info("\tNo associated SalesForce account found.")
-														elif(numberOfAccounts == 1):
+														if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+															numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
+															if (numberOfAccounts == 0):
+																logging.info("\tNo associated SalesForce account found.")
+															elif(numberOfAccounts == 1):
+																salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+																logging.info("\tSRC: " + getEventFieldValue('Source', event))
+																logging.info("\tSFA: " + salesforceAccount)
+																logging.info("\tDST: " + getEventFieldValue('Destination', event))
+																logging.info("\tSFU: " + salesforceUser)
+																logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+																logging.info("\tLogging Call in SalesForce...")
+																createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
+																logging.info("\tLogged.")
+															elif(numberOfAccounts > 1):
+																logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+														else: # exact contact salesforceAccountc
 															salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+															salesforceContact = getContactId(getEventFieldValue('Source', event))
 															logging.info("\tSRC: " + getEventFieldValue('Source', event))
 															logging.info("\tSFA: " + salesforceAccount)
+															logging.info("\tSFC: " + salesforceContact)
 															logging.info("\tDST: " + getEventFieldValue('Destination', event))
 															logging.info("\tSFU: " + salesforceUser)
 															logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 															logging.info("\tLogging Call in SalesForce...")
-															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
-															logging.info("\tLogged.")
-														elif(numberOfAccounts > 1):
-															logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-													else: # exact contact salesforceAccountc
-														salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-														salesforceContact = getContactId(getEventFieldValue('Source', event))
-														logging.info("\tSRC: " + getEventFieldValue('Source', event))
-														logging.info("\tSFA: " + salesforceAccount)
-														logging.info("\tSFC: " + salesforceContact)
-														logging.info("\tDST: " + getEventFieldValue('Destination', event))
-														logging.info("\tSFU: " + salesforceUser)
-														logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-														logging.info("\tLogging Call in SalesForce...")
-														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
-
+															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
+													except Exception as detail:
+														logging.warning("Event error:", detail)
 												else:
 													logging.info("\tNo associated SalesForce user found.")
 											else:
@@ -1160,34 +1166,37 @@ def mainloop():
 													#		1: exact match -> log with account
 													#		2: no exact match -> don't log
 													#	1: Log call with that contact
-													numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
-													if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-														numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
-														if (numberOfAccounts == 0):
-															logging.info("\tNo associated SalesForce account found.")
-														elif(numberOfAccounts == 1):
+													try:
+														numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
+														if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+															numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
+															if (numberOfAccounts == 0):
+																logging.info("\tNo associated SalesForce account found.")
+															elif(numberOfAccounts == 1):
+																salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+																logging.info("\tSRC: " + getEventFieldValue('Source', event))
+																logging.info("\tSFA: " + salesforceAccount)
+																logging.info("\tDST: " + getEventFieldValue('Destination', event))
+																logging.info("\tSFU: " + salesforceUser)
+																logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+																logging.info("\tLogging Call in SalesForce...")
+																createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
+																logging.info("\tLogged.")
+															elif(numberOfAccounts > 1):
+																logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+														else: # exact contact match
 															salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+															salesforceContact = getContactId(getEventFieldValue('Destination', event))
 															logging.info("\tSRC: " + getEventFieldValue('Source', event))
 															logging.info("\tSFA: " + salesforceAccount)
+															logging.info("\tSFC: " + salesforceContact)
 															logging.info("\tDST: " + getEventFieldValue('Destination', event))
 															logging.info("\tSFU: " + salesforceUser)
 															logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 															logging.info("\tLogging Call in SalesForce...")
-															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
-															logging.info("\tLogged.")
-														elif(numberOfAccounts > 1):
-															logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-													else: # exact contact match
-														salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-														salesforceContact = getContactId(getEventFieldValue('Destination', event))
-														logging.info("\tSRC: " + getEventFieldValue('Source', event))
-														logging.info("\tSFA: " + salesforceAccount)
-														logging.info("\tSFC: " + salesforceContact)
-														logging.info("\tDST: " + getEventFieldValue('Destination', event))
-														logging.info("\tSFU: " + salesforceUser)
-														logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-														logging.info("\tLogging Call in SalesForce...")
-														createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
+															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
+													except Exception as detail:
+														logging.warning("Event error:", detail)
 												else:
 													logging.info("\tNo associated SalesForce user found.")
 											else:
