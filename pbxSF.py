@@ -839,13 +839,26 @@ def getAccountId(phonenumber):
 		lastAPIconnection = time.time()
 		if (len(results) == 1): # return ID of only match
 			return results[0]['AccountId']
-		else:
+		elif (len(results) == 0):
 			# No Contact found; looking for mobiles
 			results = sf.query_all("SELECT AccountId FROM Contact WHERE MobilePhone LIKE '" + term + "'")["records"]
 			lastAPIconnection = time.time()
 			if (len(results) == 1): # return ID of only match
 				return results[0]['AccountId']
-	return None
+			else: # if multiple results, check if they belong to the same account
+				accountId = results[0]['AccountId']
+				for contact in results:
+					if contact['AccountId'] != accountId:
+						logging.warning("No unique account found")
+						return None
+				return accountId	
+		else: # if multiple results, check if they belong to the same account
+			accountId = results[0]['AccountId']
+			for contact in results:
+				if contact['AccountId'] != accountId:
+					logging.warning("No unique account found")
+					return None
+			return accountId
 
 def getContactId(phonenumber):
 	'''
