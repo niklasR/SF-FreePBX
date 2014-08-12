@@ -1342,7 +1342,7 @@ if __name__ == "__main__":
 		smtpValid = False
 		astValid = False
 		emailEnabled = False
-		shortEnabled = False
+		shortEnabled = True
 
 	showMessage = set()
 
