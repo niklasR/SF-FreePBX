@@ -774,11 +774,18 @@ def getNumberTerm(phonenumber):
 	Returns wildcarded version of phonenumber.
 	Strips +/00 off of the beginning, and the next two digits to account for country codes
 	'''
-	# Strip + or 00 or 0 off of the beginning of the phone number
+
+	if (phonenumber.startswith('0') and not phonenumber.startswith('00')):
+		stripTwo = False
+	else:
+		stripTwo = True
+
+	# Strip + or 00 or 0 off of phone number
 	number = phonenumber.lstrip('+')
-	number = number.lstrip('00') 
+	number = number.lstrip('00')
 	# Strip first 2 digits of phone number in case the CID (caller provider specific) includes a country code
-	number = number[2:len(number)]
+	if stripTwo:
+		number = number[2:len(number)]
 	term = '%' # searchterm for salesfore SQOL
 	for digit in number:
 		term += (digit + "%")
