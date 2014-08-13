@@ -265,11 +265,19 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				logging.debug("Old mailing list: " + str(emailUsers))
 				logging.debug("Old whitelist: " + str(whitelistLogging))
 
+
+				activeUsers = getActiveUsers()
+				allExtensions = getAllExtensions()
+
+				userIds = {}
+				for user in activeUsers:
+					userIds[activeUsers[user]['Name']] = user
+
 				# add new extensions to email list
 				whitelistUsers = set() # set for user IDs of all whitelisted extensions
 				# populate whitelistUsers
 				for extension in qs['whitelist']:
-					whitelistUsers.add(getUserId(str(getAllExtensions()[extension])))
+					whitelistUsers.add(userIds[str(allExtensions[extension])])
 				# add Ids
 				for userId in whitelistUsers:
 					if userId not in emailUsers:
@@ -279,7 +287,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				removedExts = set(whitelistLogging) - set(qs['whitelist'])
 				removedUsers = set()
 				for extension in removedExts:
-					removedUsers.add(getUserId(str(getAllExtensions()[extension])))
+					removedUsers.add(userIds[str(allExtensions[extension])])
 				# remove Ids
 				for userId in removedUsers:
 					del emailUsers[userId]
