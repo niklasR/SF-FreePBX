@@ -55,7 +55,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global loggingEnabled
 		global emailEnabled
 		global sharedUsers
-		global shortEnabled
 		global emailUsers
 		global whitelistLogging
 		global emailEnabled
@@ -133,13 +132,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				elif qs['voicemail'][0] == 'enable':
 					voicemailEnabled = True
 
-			# Enable/Disable logging of calls shorter than 8 secs
-			if 'short' in qs:
-				if qs['short'][0] == 'disable':
-					shortEnabled = False
-				elif qs['short'][0] == 'enable':
-					shortEnabled = True
-
 			# Enable/Disable logging
 			if 'loggingEnabled' in qs:
 				if qs['loggingEnabled'][0] == 'disable':
@@ -210,7 +202,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global asteriskUpdated
 		global smtpValid
 		global smtpAuth
-		global shortEnabled
 		global emailUsers
 
 		# Time request
@@ -302,7 +293,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Save config (encrypted)
 			if ('savename' in qs) and ('savesecret' in qs):
 				if len(qs['savesecret'][0]) >= 8:
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid, emailEnabled, shortEnabled, emailUsers), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
+					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid, emailEnabled, emailUsers), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
 					logging.info("Config saved as " + qs['savename'][0] + ".epk")
 					showMessage.add("Config saved as '" + qs['savename'][0] + "'.")
 				else:
@@ -313,7 +304,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			if ('loadname' in qs) and ('loadsecret' in qs):
 				data = loadData(qs['loadname'][0] + ".epk", qs['loadsecret'][0]*4)
 				if data:
-					if len(data) == 15:
+					if len(data) == 14:
 						sharedUsers = data[0]
 						whitelistLogging = data[1]
 						unansweredEnabled = data[2]
@@ -326,8 +317,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						smtpAuth = data[10]
 						smtpValid = data[11]
 						emailEnabled = data[12]
-						shortEnabled = data[13]
-						emailUsers = data[14]
+						emailUsers = data[13]
 						updateSF(salesforceAuth)
 						showMessage.add("Config loaded succesfully.")
 						logging.info("Config loaded from file: " + qs['loadname'][0])
@@ -429,7 +419,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global sfValid
 		global asteriskAuth
 		global astValid
-		global shortEnabled
 
 		html = """
 		<!doctype html>
@@ -545,10 +534,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable unanswered calls</a>'
 			else:
 				html += '<a href="/?unanswered=enable" class="btn btn-success" style="margin:5px;" role="button">Enable unanswered calls</a>'
-			if shortEnabled:
-				html += '<a href="/?short=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable short calls</a>'
-			else:
-				html += '<a href="/?short=enable" class="btn btn-success" style="margin:5px;" role="button">Enable short calls</a>'
 			if voicemailEnabled:
 				html += '<a href="/?voicemail=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable voicemail</a>'
 			else:
@@ -1201,58 +1186,55 @@ def mainloop():
 										# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
 										if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
 											if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailEnabled):
-												if not (int(getEventFieldValue('BillableSeconds', event)) < 8 and not shortEnabled):
-													# Check if extension is saved as shared User in config
-													salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
-													# If not saved, check if extension matches any SalesForce user
-													if not salesforceUser:
-														localName = getAllExtensions()[getEventFieldValue('Destination', event)]
-														if localName:
-															salesforceUser = getUserId(str(localName))
-													# If SalesForce user matched via either of the above, proceed recordings.
-													if salesforceUser:
-														# check for number of contacts with SRC number and take action based on that:
-														#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
-														#		0: no match -> no log
-														#		1: exact match -> log with account
-														#		2: no exact match -> don't log
-														#	1: Log call with that contact
-														try:
-															numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
+												# Check if extension is saved as shared User in config
+												salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
+												# If not saved, check if extension matches any SalesForce user
+												if not salesforceUser:
+													localName = getAllExtensions()[getEventFieldValue('Destination', event)]
+													if localName:
+														salesforceUser = getUserId(str(localName))
+												# If SalesForce user matched via either of the above, proceed recordings.
+												if salesforceUser:
+													# check for number of contacts with SRC number and take action based on that:
+													#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+													#		0: no match -> no log
+													#		1: exact match -> log with account
+													#		2: no exact match -> don't log
+													#	1: Log call with that contact
+													try:
+														numberOfContacts = getNumberOfContacts(getEventFieldValue('Source', event))
 
-															if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-																numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
-																if (numberOfAccounts == 0):
-																	logging.info("\tNo associated SalesForce account found.")
-																elif(numberOfAccounts == 1):
-																	salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-																	logging.info("\tSRC: " + getEventFieldValue('Source', event))
-																	logging.info("\tSFA: " + salesforceAccount)
-																	logging.info("\tDST: " + getEventFieldValue('Destination', event))
-																	logging.info("\tSFU: " + salesforceUser)
-																	logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-																	logging.info("\tLogging Call in SalesForce...")
-																	createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
-																	logging.info("\tLogged.")
-																elif(numberOfAccounts > 1):
-																	logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-															else: # exact contact salesforceAccountc
+														if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+															numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Source', event))
+															if (numberOfAccounts == 0):
+																logging.info("\tNo associated SalesForce account found.")
+															elif(numberOfAccounts == 1):
 																salesforceAccount = getAccountId(getEventFieldValue('Source', event))
-																salesforceContact = getContactId(getEventFieldValue('Source', event))
 																logging.info("\tSRC: " + getEventFieldValue('Source', event))
 																logging.info("\tSFA: " + salesforceAccount)
-																logging.info("\tSFC: " + salesforceContact)
 																logging.info("\tDST: " + getEventFieldValue('Destination', event))
 																logging.info("\tSFU: " + salesforceUser)
 																logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 																logging.info("\tLogging Call in SalesForce...")
-																createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
-														except Exception as detail:
-															logging.warning("Event error:", detail)
-													else:
-														logging.info("\tNo associated SalesForce user found.")
+																createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound; Contact unknown", None)
+																logging.info("\tLogged.")
+															elif(numberOfAccounts > 1):
+																logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+														else: # exact contact salesforceAccountc
+															salesforceAccount = getAccountId(getEventFieldValue('Source', event))
+															salesforceContact = getContactId(getEventFieldValue('Source', event))
+															logging.info("\tSRC: " + getEventFieldValue('Source', event))
+															logging.info("\tSFA: " + salesforceAccount)
+															logging.info("\tSFC: " + salesforceContact)
+															logging.info("\tDST: " + getEventFieldValue('Destination', event))
+															logging.info("\tSFU: " + salesforceUser)
+															logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+															logging.info("\tLogging Call in SalesForce...")
+															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Inbound", salesforceContact)
+													except Exception as detail:
+														logging.warning("Event error:", detail)
 												else:
-													logging.info("\tLogging calls shorter than 8 seconds not enabled.")	
+													logging.info("\tNo associated SalesForce user found.")
 											else:
 												logging.info("\tCalls to voicemail not logged.")
 										else:
@@ -1266,58 +1248,55 @@ def mainloop():
 									if isLoggingEnabled(getEventFieldValue('Source', event)):
 										# check whether the call has NOT been answered and if so, whether the extension has logging of unsanwered calls enabled
 										if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
-											if (len(str(getEventFieldValue('Destination', event))) > 4):									
-												if not (int(getEventFieldValue('BillableSeconds', event)) < 8 and not shortEnabled):
-													# Check if extension is saved as shared User in config
-													salesforceUser = getSharedUser(getEventFieldValue('Source', event))
-													# If not saved, check if extension matches any SalesForce user
-													if not salesforceUser:
-														localName = getAllExtensions()[getEventFieldValue('Source', event)]
-														if localName:
-															salesforceUser = getUserId(str(localName))
-													# If SalesForce user matched via either of the above, proceed recordings.
-													if salesforceUser:
-														# check for number of contacts with DST number and take action based on that:
-														#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
-														#		0: no match -> no log
-														#		1: exact match -> log with account
-														#		2: no exact match -> don't log
-														#	1: Log call with that contact
-														try:
-															numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
-															if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
-																numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
-																if (numberOfAccounts == 0):
-																	logging.info("\tNo associated SalesForce account found.")
-																elif(numberOfAccounts == 1):
-																	salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-																	logging.info("\tSRC: " + getEventFieldValue('Source', event))
-																	logging.info("\tSFA: " + salesforceAccount)
-																	logging.info("\tDST: " + getEventFieldValue('Destination', event))
-																	logging.info("\tSFU: " + salesforceUser)
-																	logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
-																	logging.info("\tLogging Call in SalesForce...")
-																	createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
-																	logging.info("\tLogged.")
-																elif(numberOfAccounts > 1):
-																	logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
-															else: # exact contact match
+											if (len(str(getEventFieldValue('Destination', event))) > 4):							
+												# Check if extension is saved as shared User in config
+												salesforceUser = getSharedUser(getEventFieldValue('Source', event))
+												# If not saved, check if extension matches any SalesForce user
+												if not salesforceUser:
+													localName = getAllExtensions()[getEventFieldValue('Source', event)]
+													if localName:
+														salesforceUser = getUserId(str(localName))
+												# If SalesForce user matched via either of the above, proceed recordings.
+												if salesforceUser:
+													# check for number of contacts with DST number and take action based on that:
+													#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
+													#		0: no match -> no log
+													#		1: exact match -> log with account
+													#		2: no exact match -> don't log
+													#	1: Log call with that contact
+													try:
+														numberOfContacts = getNumberOfContacts(getEventFieldValue('Destination', event))
+														if (numberOfContacts != 1): # 0 or 2+ contacts associated with phone number
+															numberOfAccounts = getNumberOfAccounts(getEventFieldValue('Destination', event))
+															if (numberOfAccounts == 0):
+																logging.info("\tNo associated SalesForce account found.")
+															elif(numberOfAccounts == 1):
 																salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
-																salesforceContact = getContactId(getEventFieldValue('Destination', event))
 																logging.info("\tSRC: " + getEventFieldValue('Source', event))
 																logging.info("\tSFA: " + salesforceAccount)
-																logging.info("\tSFC: " + salesforceContact)
 																logging.info("\tDST: " + getEventFieldValue('Destination', event))
 																logging.info("\tSFU: " + salesforceUser)
 																logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
 																logging.info("\tLogging Call in SalesForce...")
-																createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
-														except Exception as detail:
-															logging.warning("Event error:", detail)
-													else:
-														logging.info("\tNo associated SalesForce user found.")
+																createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound; Contact unknown", None)
+																logging.info("\tLogged.")
+															elif(numberOfAccounts > 1):
+																logging.info("\t" + str(numberOfAccounts) + " accounts found. No exact match possible.")
+														else: # exact contact match
+															salesforceAccount = getAccountId(getEventFieldValue('Destination', event))
+															salesforceContact = getContactId(getEventFieldValue('Destination', event))
+															logging.info("\tSRC: " + getEventFieldValue('Source', event))
+															logging.info("\tSFA: " + salesforceAccount)
+															logging.info("\tSFC: " + salesforceContact)
+															logging.info("\tDST: " + getEventFieldValue('Destination', event))
+															logging.info("\tSFU: " + salesforceUser)
+															logging.info("\tSEC: " + getEventFieldValue('BillableSeconds', event))
+															logging.info("\tLogging Call in SalesForce...")
+															createTask(salesforceAccount, makeSummary(event), salesforceUser, "Call Outbound", salesforceContact)
+													except Exception as detail:
+														logging.warning("Event error:", detail)
 												else:
-													logging.info("\tLogging of calls shorter than 8 seconds disabled.")
+													logging.info("\tNo associated SalesForce user found.")
 											else:
 												logging.info("\tExtension dialled.")
 										else:
@@ -1364,7 +1343,6 @@ if __name__ == "__main__":
 	global smtpAuth
 	global smtpValid
 	global emailEnabled
-	global shortEnabled
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],"hp:f:s:",["help","port=","configfile=","secret="])
@@ -1417,8 +1395,7 @@ if __name__ == "__main__":
 		smtpAuth = data[10]
 		smtpValid = data[11]
 		emailEnabled = data[12]
-		shortEnabled = data[13]
-		emailUsers = data[14]
+		emailUsers = data[13]
 		updateSF(salesforceAuth)
 
 		dataLoaded = True
@@ -1441,7 +1418,6 @@ if __name__ == "__main__":
 		smtpValid = False
 		astValid = False
 		emailEnabled = False
-		shortEnabled = True
 		emailUsers = {}
 
 	showMessage = set()
