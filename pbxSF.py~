@@ -56,7 +56,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global emailEnabled
 		global sharedUsers
 		global shortEnabled
-		global emailUsers
 
 		# Time request
 		starttime = time.time()
@@ -153,11 +152,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						del sharedUsers[userId]
 						showMessage.add("Shared User deleted.")
 					else:
-						logging.warning("UserId not found in sharedUsers.")
-					if userId in emailUsers:
-						del emailUsers[userId]
-					else:
-						logging.warning("UserId not found in emailUsers.")
+						logging.warning("UserId no found in sharedUsers")
 
 			 # if any GET arguments, redirect to clean / after processing to avoid double requests if user refreshes
 			if len(qs) > 0:
@@ -195,7 +190,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global smtpAuth
 		global emailEnabled
 		global shortEnabled
-		global emailUsers
 
 		# Time request
 		starttime = time.time()
@@ -253,40 +247,12 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
 			# Update active extensions
 			if 'whitelist' in qs:
-
-				logging.debug("Deleting users from mailing list...")
-				logging.debug("Old mailing list: " + str(emailUsers))
-				logging.debug("Old whitelist: " + str(whitelistLogging))
-
-				# add new extensions to email list
-				whitelistUsers = set() # set for user IDs of all whitelisted extensions
-				# populate whitelistUsers
-				for extension in qs['whitelist']:
-					whitelistUsers.add(getUserId(str(getAllExtensions()[extension])))
-				# add Ids
-				for userId in whitelistUsers:
-					if userId not in emailUsers:
-						emailUsers[userId] = True
-
-				# Remove old IDs
-				removedExts = set(whitelistLogging) - set(qs['whitelist'])
-				removedUsers = set()
-				for extension in removedExts:
-					removedUsers.add(getUserId(str(getAllExtensions()[extension])))
-				# remove Ids
-				for userId in removedUsers:
-					del emailUsers[userId]
-				logging.debug("New mailing list: " + str(emailUsers))
-
-				# Update general logging list
-				whitelistLogging = tuple(qs['whitelist']) # Tuple, because sets not JSON serialisable by default
-				logging.debug("New whitelist: " + str(whitelistLogging))
-
+				whitelistLogging = tuple(qs['whitelist'])
 
 			# Save config (encrypted)
 			if ('savename' in qs) and ('savesecret' in qs):
 				if len(qs['savesecret'][0]) >= 8:
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid, emailEnabled, shortEnabled, emailUsers), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
+					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, voicemailEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid, emailEnabled, shortEnabled), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
 					logging.info("Config saved as " + qs['savename'][0] + ".epk")
 					showMessage.add("Config saved as '" + qs['savename'][0] + "'.")
 				else:
@@ -297,7 +263,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			if ('loadname' in qs) and ('loadsecret' in qs):
 				data = loadData(qs['loadname'][0] + ".epk", qs['loadsecret'][0]*4)
 				if data:
-					if len(data) == 15:
+					if len(data) == 14:
 						sharedUsers = data[0]
 						whitelistLogging = data[1]
 						unansweredEnabled = data[2]
@@ -311,7 +277,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						smtpValid = data[11]
 						emailEnabled = data[12]
 						shortEnabled = data[13]
-						emailUsers = data[14]
 						updateSF(salesforceAuth)
 						showMessage.add("Config loaded succesfully.")
 						logging.info("Config loaded from file: " + qs['loadname'][0])
@@ -342,10 +307,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Update Saleforce Data
 			if 'sf_instance' in qs and 'sf_token' in qs and 'sf_password' in qs and 'sf_username' in qs:
 				salesforceAuth = (qs['sf_instance'][0], qs['sf_username'][0], qs['sf_password'][0], qs['sf_token'][0])
-				if updateSF(salesforceAuth):
-					showMessage.add("SalesForce data succesfully updated.")
-				else:
-					showMessage.add("SalesForce could not be updated.")
+				updateSF(salesforceAuth)
 			elif 'sf_instance' in qs or 'sf_token' in qs or 'sf_password' in qs or 'sf_username' in qs:
 				logging.warning("Only parts of SF login received.")
 				showMessage.add("Please enter all data associated with the SalesForce user would like to log-in with. Please refer to the README if you're unsure about this.")
@@ -378,16 +340,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					if not userId in sharedUsers: # only if user not added as shared user, yet
 						sharedUsers[userId] = []
 						showMessage.add("Shared User added.")
-					if not userId in emailUsers:
-						emailUsers[userId] = True
-
-			# Disable / Enabled Email Users:
-			if 'emailEnabled' in qs:
-				for userId in emailUsers:
-					if userId in qs['emailEnabled']:
-						emailUsers[userId] = True
-					else:
-						emailUsers[userId] = False
 
 			# All user IDs in SalesForce begin with 005, so if there is a key beginning with 005, we assume it's a sharedUser and update the entry accordingly.
 			sharedUsersGet = sliceDict(qs, '005')
@@ -448,7 +400,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# save current data from SF and freePBX for access throughout processing of the request
 			extensions = sorted(getAllExtensions().iteritems(), key=lambda (k,v): v) # Sort by value (Name; put "k" to sort by the key, the extension)
 			activeUsers = getActiveUsers()
-
 			activeUsersNames = getUsersNames(activeUsers)
 			
 			# Get active extensions and mark them as "selected" in the form.
@@ -491,26 +442,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							</form>
 							</div>
 						</div>"""
-			html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-					<div class="panel-heading">Emails Enabled<br />&nbsp;</div>
-					<div class="panel-body">
-					<form role="form" action="/" autocomplete="off" method="POST" >
-					<div class="form-group">
-					<select class="form-control" name="emailEnabled" multiple="multiple" style="height:300px;width=90%">'"""
-			for UserId in emailUsers:
-				html += '<option value="' + UserId
-				if emailUsers[UserId]:
-					html += '" selected="selected">'
-				else:
-					html += '">'
-				html += activeUsers[UserId]['Username'] + "</option>"
-			html += """
-						</select><br />
-						<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
-						</div>
-						</form>
-						</div>
-					</div>"""
 			# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
 			html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 						<div class="panel-heading">Options<br/>&nbsp;</div>
@@ -983,13 +914,9 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 			})
 		lastAPIconnection = time.time()
 		logging.info("\tCall logged. Task Id: " + str(task['id']) + ".")
-		if emailEnabled and emailUsers[userId]:
-			try:
-				if sendEmail(userId, task['id'], smtpAuth): # Does not take into account shared Accounts.
-					logging.info("\tEmail sent.")
-			except:
-				logging.warning("Email could not be sent.")
-				showMessage.add("Check your email settings - Something seems to be wrong!")
+		if emailEnabled:
+			sendEmail(userId, task['id'], smtpAuth) # Does not take into account shared Accounts.
+			logging.info("\tEmail sent.")
 
 	else:
 		logging.info("\t------")
@@ -1079,11 +1006,9 @@ def updateSF(salesforceAuth):
 		sf = Salesforce(instance=salesforceAuth[0], username=salesforceAuth[1], password=salesforceAuth[2], security_token=salesforceAuth[3])
 		sfValid = True
 		logging.info("SF Object created.")
-		return True
 	except:
 		sfValid = False
 		logging.warning("SF Object could not be created.")
-		return False
 
 def isAstValid(asteriskAuth):
 	try:
@@ -1124,19 +1049,17 @@ def sendEmail(userId, taskId, smtpAuth):
 	try:
 		server.login(smtpAuth[3], smtpAuth[4])
 	except:
-		logging.warning("Could not send email; check SMTP log-in.")
+		logging.warning("Could not sent email; check SMTP log-in.")
 		showMessage.add("Please update the email config; the data seems to be incorrect!")
-		return
 
 	msg = MIMEMultipart()
-	msg['From'] = smtpAuth[2] #<- This will throw exception if no mail settings set
+	msg['From'] = smtpAuth[2]
 	msg['To'] = sf.User.get(userId)['Email']
 	msg['Subject'] = 'Your call with ' + sf.Account.get(sf.Task.get(taskId)['WhatId'])['Name'] + '.'
 	body = "Hi " + sf.User.get(userId)['FirstName'] + ",\nyou have just finished a call which has been logged in SalesForce.\n\nPlease update the entry with details about the call: http://" + salesforceAuth[0] + "/" + taskId + "/e.\n\n---- THIS IS AN AUTOMATICALLY GENERATED MESSAGE. ----"
 
 	msg.attach(MIMEText(body, 'plain'))	
 	server.sendmail(smtpAuth[2], msg['To'], msg.as_string())
-	return True
 
 def mainloop():
 	'''
@@ -1397,7 +1320,6 @@ if __name__ == "__main__":
 		smtpValid = data[11]
 		emailEnabled = data[12]
 		shortEnabled = data[13]
-		emailUsers = data[14]
 		updateSF(salesforceAuth)
 
 		dataLoaded = True
@@ -1409,7 +1331,7 @@ if __name__ == "__main__":
 	
 	if not dataLoaded:
 		sharedUsers = {}
-		whitelistLogging = tuple()
+		whitelistLogging = ()
 		unansweredEnabled = True
 		loggingEnabled = False
 		voicemailEnabled = True
@@ -1421,7 +1343,6 @@ if __name__ == "__main__":
 		astValid = False
 		emailEnabled = False
 		shortEnabled = True
-		emailUsers = {}
 
 	showMessage = set()
 
