@@ -57,6 +57,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global sharedUsers
 		global shortEnabled
 		global emailUsers
+		global whitelistLogging
+		global emailEnabled
 
 		# Time request
 		starttime = time.time()
@@ -145,6 +147,20 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				elif qs['loggingEnabled'][0] == 'enable':
 					loggingEnabled = True
 
+			# Clear lists
+			if 'clear' in qs:
+				if qs['clear'][0] == 'active':
+					whitelistLogging = tuple()
+					emailUsersTemp = {} # new emailUsers
+					for userId in emailUsers:
+						if userId in sharedUsers:
+							emailUsersTemp[userId] = emailUsers[userId]
+					emailUsers = emailUsersTemp
+
+				elif qs['clear'][0] == 'email':
+					for userId in emailUsers:
+						emailUsers[userId] = False
+
 			# Delete Shared User
 			if 'deleteUser' in qs:
 				logging.info("Deleting shared User")
@@ -181,6 +197,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global authKey
 		global salesforceAuth
 		global whitelistLogging
+		global emailEnabled
 		global sharedUsers
 		global unansweredEnabled
 		global loggingEnabled
@@ -193,7 +210,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global asteriskUpdated
 		global smtpValid
 		global smtpAuth
-		global emailEnabled
 		global shortEnabled
 		global emailUsers
 
@@ -463,6 +479,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			html += """
 						</select><br />
 						<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
+						<a href="/?clear=active" class="btn btn-danger" style="margin:5px;" role="button">Clear</a>
 						</div>
 						</form>
 						</div>
@@ -491,26 +508,30 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							</form>
 							</div>
 						</div>"""
-			html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
-					<div class="panel-heading">Emails Enabled<br />&nbsp;</div>
-					<div class="panel-body">
-					<form role="form" action="/" autocomplete="off" method="POST" >
-					<div class="form-group">
-					<select class="form-control" name="emailEnabled" multiple="multiple" style="height:300px;width=90%">'"""
-			for UserId in emailUsers:
-				html += '<option value="' + UserId
-				if emailUsers[UserId]:
-					html += '" selected="selected">'
-				else:
-					html += '">'
-				html += activeUsers[UserId]['Username'] + "</option>"
-			html += """
-						</select><br />
-						<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
-						</div>
-						</form>
-						</div>
-					</div>"""
+
+			# Selection of users to receive emails
+			if len(emailUsers) > 0:
+				html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+						<div class="panel-heading">Emails Enabled<br />&nbsp;</div>
+						<div class="panel-body">
+						<form role="form" action="/" autocomplete="off" method="POST" >
+						<div class="form-group">
+						<select class="form-control" name="emailEnabled" multiple="multiple" style="height:300px;width=90%">'"""
+				for UserId in emailUsers:
+					html += '<option value="' + UserId
+					if emailUsers[UserId]:
+						html += '" selected="selected">'
+					else:
+						html += '">'
+					html += activeUsers[UserId]['Username'] + "</option>"
+				html += """
+							</select><br />
+							<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
+							<a href="/?clear=email" class="btn btn-danger" style="margin:5px;" role="button">Clear</a>
+							</div>
+							</form>
+							</div>
+						</div>"""
 			# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
 			html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 						<div class="panel-heading">Options<br/>&nbsp;</div>
