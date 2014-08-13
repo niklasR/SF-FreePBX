@@ -50,7 +50,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		# Load global names
 		global authKey
 		global showMessage
-		global unansweredEnabled
 		global loggingEnabled
 		global emailEnabled
 		global sharedUsers
@@ -58,6 +57,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global whitelistLogging
 		global emailEnabled
 		global voicemailUsers
+		global unansweredUsers
 
 		# Time request
 		starttime = time.time()
@@ -111,13 +111,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				dict_print += "\n"
 			logging.info("GET arguments: " + dict_print)
 
-			# Enable/Disable logging of unanswered calls
-			if 'unanswered' in qs:
-				if qs['unanswered'][0] == 'disable':
-					unansweredEnabled = False
-				elif qs['unanswered'][0] == 'enable':
-					unansweredEnabled = True
-
 			# Enable/Disable sending emails
 			if 'emailEnabled' in qs:
 				if qs['emailEnabled'][0] == 'disable':
@@ -150,6 +143,10 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					for userId in voicemailUsers:
 						voicemailUsers[userId] = False
 
+				elif qs['clear'][0] == 'unanswered':
+					for userId in unansweredUsers:
+						unansweredUsers[userId] = False
+
 			# Delete Shared User
 			if 'deleteUser' in qs:
 				logging.info("Deleting shared User")
@@ -167,6 +164,10 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						del voicemailUsers[userId]
 					else:
 						logging.warning("UserId not found in voicemailUsers.")
+					if userId in unansweredUsers:
+						del unansweredUsers[userId]
+					else:
+						logging.warning("UserId not found in unansweredUsers.")
 
 			 # if any GET arguments, redirect to clean / after processing to avoid double requests if user refreshes
 			if len(qs) > 0:
@@ -192,7 +193,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global whitelistLogging
 		global emailEnabled
 		global sharedUsers
-		global unansweredEnabled
 		global loggingEnabled
 		global showMessage
 		global sfValid
@@ -204,6 +204,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global smtpAuth
 		global emailUsers
 		global voicemailUsers
+		global unansweredUsers
 
 		# Time request
 		starttime = time.time()
@@ -285,6 +286,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						emailUsers[userId] = True
 					if userId not in voicemailUsers:
 						voicemailUsers[userId] = True
+					if userId not in unansweredUsers:
+						unansweredUsers[userId] = True
 
 				# Remove old IDs
 				removedExts = set(whitelistLogging) - set(qs['whitelist'])
@@ -295,6 +298,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				for userId in removedUsers:
 					del emailUsers[userId]
 					del voicemailUsers[userId]
+					del unansweredUsers[userId]
 				logging.debug("New mailing list: " + str(emailUsers))
 
 				# Update general logging list
@@ -304,7 +308,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Save config (encrypted)
 			if ('savename' in qs) and ('savesecret' in qs):
 				if len(qs['savesecret'][0]) >= 8:
-					saveData((sharedUsers, whitelistLogging, unansweredEnabled, loggingEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid, emailEnabled, emailUsers, voicemailUsers), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
+					saveData((sharedUsers, whitelistLogging, loggingEnabled, authKey, salesforceAuth, asteriskAuth, astValid, sfValid, smtpAuth, smtpValid, emailEnabled, emailUsers, voicemailUsers, unansweredUsers), qs['savename'][0] + ".epk", {0: qs['savesecret'][0]*4})
 					logging.info("Config saved as " + qs['savename'][0] + ".epk")
 					showMessage.add("Config saved as '" + qs['savename'][0] + "'.")
 				else:
@@ -318,18 +322,18 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					if len(data) == 14:
 						sharedUsers = data[0]
 						whitelistLogging = data[1]
-						unansweredEnabled = data[2]
-						loggingEnabled = data[3]
-						authKey = data[4]
-						salesforceAuth = data[5]
-						asteriskAuth = data[6]
-						astValid = data[7]
-						sfValid = data[8]
-						smtpAuth = data[9]
-						smtpValid = data[10]
-						emailEnabled = data[11]
-						emailUsers = data[12]
-						voicemailUsers = data[13]
+						loggingEnabled = data[2]
+						authKey = data[3]
+						salesforceAuth = data[4]
+						asteriskAuth = data[5]
+						astValid = data[6]
+						sfValid = data[7]
+						smtpAuth = data[8]
+						smtpValid = data[9]
+						emailEnabled = data[10]
+						emailUsers = data[11]
+						voicemailUsers = data[12]
+						unansweredUsers = data[13]
 
 						updateSF(salesforceAuth)
 						showMessage.add("Config loaded succesfully.")
@@ -401,6 +405,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						emailUsers[userId] = True
 					if not userId in voicemailUsers:
 						voicemailUsers[userId] = True
+					if not userId in unansweredUsers:
+						unansweredUsers[userId] = True
 
 			# Disable / Enabled Email Users:
 			if 'emailEnabled' in qs:
@@ -418,6 +424,14 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					else:
 						voicemailUsers[userId] = False
 
+			# Disable / Enable Unanswered Users:
+			if 'unansweredUsers' in qs:
+				for userId in unansweredUsers:
+					if userId in qs['unansweredUsers']:
+						unansweredUsers[userId] = True
+					else:
+						unansweredUsers[userId] = False
+
 			# All user IDs in SalesForce begin with 005, so if there is a key beginning with 005, we assume it's a sharedUser and update the entry accordingly.
 			sharedUsersGet = sliceDict(qs, '005')
 			for sharedUserGet in sharedUsersGet:
@@ -434,7 +448,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 		global salesforceAuth
 		global whitelistLogging
 		global sharedUsers
-		global unansweredEnabled
 		global loggingEnabled
 		global emailEnabled
 		global showMessage
@@ -568,6 +581,29 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 							</div>
 						</div>"""
 
+			# Selection of users to have unanswered calls logged
+			if len(unansweredUsers) > 0:
+				html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
+						<div class="panel-heading">Unanswered Calls<br />Logging Enabled</div>
+						<div class="panel-body">
+						<form role="form" action="/" autocomplete="off" method="POST" >
+						<div class="form-group">
+						<select class="form-control" name="unansweredUsers" multiple="multiple" style="height:300px;width=90%">'"""
+				for UserId in unansweredUsers:
+					html += '<option value="' + UserId
+					if unansweredUsers[UserId]:
+						html += '" selected="selected">'
+					else:
+						html += '">'
+					html += activeUsers[UserId]['Name'] + "</option>"
+				html += """
+							</select><br />
+							<button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
+							<a href="/?clear=unanswered" class="btn btn-danger" style="margin:5px;" role="button">Clear</a>
+							</div>
+							</form>
+							</div>
+						</div>"""
 
 			# Options Panel to enable/disable logging, add shared users and save/load config. Buttons loaded dynamically.
 			html += """<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
@@ -578,10 +614,6 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			else:
 				html += '<a href="/?loggingEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging</a>'
 			html += '<hr/>'
-			if unansweredEnabled:
-				html += '<a href="/?unanswered=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable unanswered calls</a>'
-			else:
-				html += '<a href="/?unanswered=enable" class="btn btn-success" style="margin:5px;" role="button">Enable unanswered calls</a>'
 			html += """<hr/><form role="form" action="/" method="POST" >
 						<div class="form-group">
 						<select class="form-control" name="addUser">"""
@@ -710,12 +742,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			</div></div>
 			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">Email Config<br/>&nbsp;</div>
-				<div class="panel-body">"""
-		if emailEnabled:
-			html += '<a href="/?emailEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable Email</a>'
-		else:
-			html += '<a href="/?emailEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable Email</a>'
-		html += """<form class="form-horizontal" role=" action="/" method="POST" >
+				<div class="panel-body">
+				<form class="form-horizontal" role=" action="/" method="POST" >
 				  <div class="form-group">
 				    <label for="email_server" class="col-sm-6 control-label">Host</label>
 				    <div class="col-sm-6">
@@ -749,8 +777,13 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				  <div class="form-group">
 				    <div class="col-sm-offset-2 col-sm-10">
 				      <button type="submit" class="btn btn-primary">Update</button>
-				    </div>
-				  </div>
+				    """
+		if emailEnabled:
+			html += '<a href="/?emailEnabled=disable" class="btn btn-danger" style="margin:5px;" role="button">Disable</a>'
+		else:
+			html += '<a href="/?emailEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable</a>'
+		html += """
+				  </div></div>
 				</form>
 			</div></div>
 
@@ -1227,19 +1260,20 @@ def mainloop():
 								if str(getEventFieldValue('DestinationContext', event)) == 'from-did-direct':
 									logging.info("\tInbound")
 									if isLoggingEnabled(getEventFieldValue('Destination', event)):
-										# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
-										if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
+										
 											
-											# Check if extension is saved as shared User in config
-											salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
-											# If not saved, check if extension matches any SalesForce user
-											if not salesforceUser:
-												localName = getAllExtensions()[getEventFieldValue('Destination', event)]
-												if localName:
-													salesforceUser = getUserId(str(localName))
-											# If SalesForce user matched via either of the above, proceed recordings.
-											if salesforceUser:
-												if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailUsers[salesforceUser]):
+										# Check if extension is saved as shared User in config
+										salesforceUser = getSharedUser(getEventFieldValue('Destination', event))
+										# If not saved, check if extension matches any SalesForce user
+										if not salesforceUser:
+											localName = getAllExtensions()[getEventFieldValue('Destination', event)]
+											if localName:
+												salesforceUser = getUserId(str(localName))
+										# If SalesForce user matched via either of the above, proceed recordings.
+										if salesforceUser:
+											if not (getEventFieldValue('LastApplication', event) == "VoiceMail" and not voicemailUsers[salesforceUser]):
+												# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
+												if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredUsers[salesforceUser]):
 													# check for number of contacts with SRC number and take action based on that:
 													#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
 													#		0: no match -> no log
@@ -1279,11 +1313,11 @@ def mainloop():
 													except Exception as detail:
 														logging.warning("Event error:", detail)
 												else:
-													logging.info("\tCalls to voicemail not logged.")
+													logging.info("\tUnanswered calls not logged.")
 											else:
-												logging.info("\tNo associated SalesForce user found.")
+												logging.info("\tCalls to voicemail not logged.")
 										else:
-											logging.info("\tUnanswered calls not logged.")
+											logging.info("\tNo associated SalesForce user found.")
 									else:
 										logging.info("\tLogging not enabled for this extension.")
 
@@ -1292,17 +1326,18 @@ def mainloop():
 									logging.info("\tFrom Internal")
 									if isLoggingEnabled(getEventFieldValue('Source', event)):
 										# check whether the call has NOT been answered and if so, whether the extension has logging of unsanwered calls enabled
-										if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredEnabled):
-											if (len(str(getEventFieldValue('Destination', event))) > 4):							
-												# Check if extension is saved as shared User in config
-												salesforceUser = getSharedUser(getEventFieldValue('Source', event))
-												# If not saved, check if extension matches any SalesForce user
-												if not salesforceUser:
-													localName = getAllExtensions()[getEventFieldValue('Source', event)]
-													if localName:
-														salesforceUser = getUserId(str(localName))
-												# If SalesForce user matched via either of the above, proceed recordings.
-												if salesforceUser:
+										if (len(str(getEventFieldValue('Destination', event))) > 4):							
+											# Check if extension is saved as shared User in config
+											salesforceUser = getSharedUser(getEventFieldValue('Source', event))
+											# If not saved, check if extension matches any SalesForce user
+											if not salesforceUser:
+												localName = getAllExtensions()[getEventFieldValue('Source', event)]
+												if localName:
+													salesforceUser = getUserId(str(localName))
+											# If SalesForce user matched via either of the above, proceed recordings.
+											if salesforceUser:
+												# check whether the call has NOT been answered and if so, whether logging of unsanwered calls is enabled
+												if not (getEventFieldValue('Disposition', event) == "NO ANSWER" and not unansweredUsers[salesforceUser]):
 													# check for number of contacts with DST number and take action based on that:
 													#	0 or 2+: Search how many accounts (inc. associated contacts) are associated with the number
 													#		0: no match -> no log
@@ -1341,11 +1376,11 @@ def mainloop():
 													except Exception as detail:
 														logging.warning("Event error:", detail)
 												else:
-													logging.info("\tNo associated SalesForce user found.")
+													logging.info("\tUnanswered calls not logged.")
 											else:
-												logging.info("\tExtension dialled.")
+												logging.info("\tNo associated SalesForce user found.")
 										else:
-											logging.info("\tUnanswered calls not logged.")
+											logging.info("\tExtension dialled.")
 									else:
 										logging.info("\tLogging not enabled for this extension.")
 								else:
@@ -1373,7 +1408,6 @@ sf = None
 if __name__ == "__main__":
 	global sharedUsers
 	global whitelistLogging
-	global unansweredEnabled
 	global loggingEnabled
 	global voicemailEnabled
 	global port
@@ -1429,18 +1463,18 @@ if __name__ == "__main__":
 		data = loadData(configfile, filesecret*4)
 		sharedUsers = data[0]
 		whitelistLogging = data[1]
-		unansweredEnabled = data[2]
-		loggingEnabled = data[3]
-		authKey = data[4]
-		salesforceAuth = data[5]
-		asteriskAuth = data[6]
-		astValid = data[7]
-		sFValid = data[8]
-		smtpAuth = data[9]
-		smtpValid = data[10]
-		emailEnabled = data[11]
-		emailUsers = data[12]
-		voicemailUsers = data[13]
+		loggingEnabled = data[2]
+		authKey = data[3]
+		salesforceAuth = data[4]
+		asteriskAuth = data[5]
+		astValid = data[6]
+		sFValid = data[7]
+		smtpAuth = data[8]
+		smtpValid = data[9]
+		emailEnabled = data[10]
+		emailUsers = data[11]
+		voicemailUsers = data[12]
+		unansweredUsers = data[13]
 
 		updateSF(salesforceAuth)
 
@@ -1454,7 +1488,6 @@ if __name__ == "__main__":
 	if not dataLoaded:
 		sharedUsers = {}
 		whitelistLogging = tuple()
-		unansweredEnabled = True
 		loggingEnabled = False
 		salesforceAuth = ('', '', '', '')
 		smtpAuth = ('', '', '', '')
@@ -1465,6 +1498,7 @@ if __name__ == "__main__":
 		emailEnabled = False
 		emailUsers = {}
 		voicemailUsers = {}
+		unansweredUsers = {}
 	showMessage = set()
 
 	# Create new threads
