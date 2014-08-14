@@ -14,7 +14,7 @@ class server(threading.Thread):
     def run(self):
     	# if certificate exists, start as SSL
         if os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem')):
-        	httpd = BaseHTTPServer.HTTPServer(("", port), MyHandler)
+        	httpd = BaseHTTPServer.HTTPServer(("localhost", port), MyHandler)
         	logging.info("SERVER started with SSL. Connect with https://<localhost>:" + str(port))
         	httpd.socket = ssl.wrap_socket (httpd.socket, certfile=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem'), server_side=True) # certfile needs to include private key and certificate
         else:
