@@ -108,7 +108,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			dict_print = ""
 			for key, value in qs.items():
 				dict_print += "{} : {}".format(key, value) # for debug/log
-				dict_print += "\n"
+				dict_print += " | "
 			logging.info("GET arguments: " + dict_print)
 
 			# Enable/Disable sending emails
@@ -614,7 +614,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			else:
 				html += '<a href="/?loggingEnabled=enable" class="btn btn-success" style="margin:5px;" role="button">Enable logging</a>'
 			html += '<hr/>'
-			html += """<hr/><form role="form" action="/" method="POST" >
+			html += """<form role="form" action="/" method="POST" >
 						<div class="form-group">
 						<select class="form-control" name="addUser">"""
 			usersForShared = sorted(activeUsers.iteritems(), key=lambda (k,v): v['Username']) # Sort users by Username
