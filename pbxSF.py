@@ -88,7 +88,8 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				if self.headers.getheader('Authorization') == None:
 					self.wfile.write('no auth header received')
 				else:
-					authKey = self.headers.getheader('Authorization').strip('Basic ')
+					authHeader = self.headers.getheader('Authorization')
+					authKey = authHeader[6:len(authHeader)] # strip "Basic " off of beginning
 					showMessage.add("Your log-in details have been saved!")
 					logging.info("HTTP auth details set.")
 					logging.info("HTTP Authorised.")
@@ -348,7 +349,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			# Update Asterisk Data
 			if 'asterisk_cdr_secret' in qs and 'asterisk_cdr_user' in qs and 'asterisk_host' in qs and 'asterisk_port' in qs and 'asterisk_cmd_user' in qs and 'asterisk_cmd_secret' in qs:
 				logging.info("Updating asterisk logins...")
-				asteriskAuth = (qs['asterisk_host'][0], qs['asterisk_port'][0], qs['asterisk_cmd_user'][0], qs['asterisk_cmd_secret'][0], qs['asterisk_cdr_user'][0], qs['asterisk_cdr_secret'][0])
+				asteriskAuth = (qs['asterisk_host'][0], qs['asterisk_port'][0], qs['asterisk_cmd_user'][0], qs['asterisk_cmd_secret'][0], qs['asterisk_cdr_user'][0], qs['asterisk_cdr_secret'][0], qs['asterisk_version'][0])
 				if isAstValid(asteriskAuth):
 					astValid = True
 					asteriskUpdated = True # to tell mainloop() to reconnect.
@@ -358,7 +359,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					astValid = False
 					showMessage.add("AMI login details not correct.")
 					logging.warning("Asterisk logins incorrect")
-			elif 'asterisk_cdr_secret' in qs or 'asterisk_cdr_user' in qs or 'asterisk_host' in qs or 'asterisk_port' in qs or 'asterisk_cmd_user' in qs or 'asterisk_cmd_secret' in qs:
+			elif 'asterisk_cdr_secret' in qs or 'asterisk_cdr_user' in qs or 'asterisk_host' in qs or 'asterisk_port' in qs or 'asterisk_cmd_user' in qs or 'asterisk_cmd_secret' in qs or 'asterisk_version' in qs:
 				logging.warning("Only parts of Asterisk login data received.")
 				showMessage.add("Please enter all data associated with the FreePBX installation you would like to connect to. Please refer to the README if you're unsure about this.")
 
@@ -662,43 +663,49 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				<div class="panel-heading">Asterisk/FreePBX Config<br/>&nbsp;</div>
 				<div class="panel-body">
 				<form class="form-horizontal" role=" action="/" method="POST" >
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:10px">
 				    <label for="asterisk_host" class="col-sm-6 control-label">Host</label>
 				    <div class="col-sm-6">
 				      <input type="text" class="form-control" name="asterisk_host" id="asterisk_host" value=\"""" + str(asteriskAuth[0]) + """\" placeholder="hostname">
 				    </div>
 				  </div>
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:10px">
 				    <label for="asterisk_port" class="col-sm-6 control-label">Port</label>
 				    <div class="col-sm-6">
 				      <input type="text" class="form-control" id="asterisk_port" name="asterisk_port" value=\"""" + str(asteriskAuth[1]) + """\" placeholder="5038">
 				    </div>
 				  </div>
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:10px">
+				    <label for="asterisk_version" class="col-sm-6 control-label">AMI Version</label>
+				    <div class="col-sm-6">
+				      <input type="text" class="form-control" name="asterisk_version" id="asterisk_version" value=\"""" + str(asteriskAuth[6]) + """\" placeholder="1.3">
+				    </div>
+				  </div>
+				  <div class="form-group" style="margin-bottom:10px">
 				    <label for="asterisk_cmd_user" class="col-sm-6 control-label">CMD User</label>
 				    <div class="col-sm-6">
 				      <input type="text" class="form-control" id="asterisk_cmd_user" name="asterisk_cmd_user" value=\"""" + str(asteriskAuth[2]) + """\" placeholder="amicmd">
 				    </div>
 				  </div>
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:10px">
 				    <label for="asterisk_cmd_secret" class="col-sm-6 control-label">CMD Secret</label>
 				    <div class="col-sm-6">
 				      <input type="password" class="form-control" id="asterisk_cmd_secret" name="asterisk_cmd_secret" placeholder="Secret">
 				    </div>
 				  </div>
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:10px">
 				    <label for="asterisk_cdr_user" class="col-sm-6 control-label">CDR User</label>
 				    <div class="col-sm-6">
 				      <input type="text" class="form-control" id="asterisk_cdr_user" name="asterisk_cdr_user" value=\"""" + str(asteriskAuth[4]) + """\" placeholder="amicdr">
 				    </div>
 				  </div>
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:10px">
 				    <label for="asterisk_cdr_secret" class="col-sm-6 control-label">CDR Secret</label>
 				    <div class="col-sm-6">
 				      <input type="password" class="form-control" id="asterisk_cdr_secret" name="asterisk_cdr_secret" placeholder="Secret">
 				    </div>
 				  </div>
-				  <div class="form-group">
+				  <div class="form-group" style="margin-bottom:10px">
 				    <div class="col-sm-offset-2 col-sm-10">
 				      <button type="submit" class="btn btn-primary">Update</button>
 				    </div>
@@ -860,9 +867,10 @@ def getAllExtensions():
 	'''
 	Returns all extensions registered in FreePBX as a dictionary in the format {'ext': 'Name'}
 	'''
+	global asteriskAuth
 	# Initialise Telnet connection and log in.
 	tn_ami = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
-	tn_ami.read_until("Asterisk Call Manager/1.1")
+	tn_ami.read_until("Asterisk Call Manager/" + asteriskAuth[6])
 	tn_ami.write("Action: Login\nUsername: " + asteriskAuth[2] + "\nSecret: " + asteriskAuth[3] + "\n\n")
 
 	# Wait for fully booted
@@ -1096,10 +1104,11 @@ def getQueueMembers(extension):
 	'''
 	Returns list of extensions on given queue in FreePBX.
 	'''
+	global asteriskAuth
 	members = []
 	# Initialise Telnet connection and log in.
 	tn_ami = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
-	tn_ami.read_until("Asterisk Call Manager/1.1")
+	tn_ami.read_until("Asterisk Call Manager/" + asteriskAuth[6])
 	tn_ami.write("Action: Login\nUsername: " + asteriskAuth[2] + "\nSecret: " + asteriskAuth[3] + "\n\n")
 
 	# Wait for fully booted
@@ -1171,21 +1180,21 @@ def updateSF(salesforceAuth):
 def isAstValid(asteriskAuth):
 	try:
 		# Validate CMD user
+		logging.debug("Validating CMD...")
 		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1], 10)
-		tnTest.read_until("Asterisk Call Manager/1.1")
+		tnTest.read_until("Asterisk Call Manager/" + asteriskAuth[6])
 		tnTest.write("Action: Login\nUsername: " + asteriskAuth[2] + "\nSecret: " + asteriskAuth[3] + "\n\n")
 
 		#Wait for fully booted
 		tnTest.read_until("Status: Fully Booted")
 		logging.info("AMI user validated")
-
 		# Close Telnet connection
 		tnTest.write("Action: Logoff" + "\n\n")
 		tnTest.close()
 
 		# Validate CDR user
 		tnTest = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1], 10)
-		tnTest.read_until("Asterisk Call Manager/1.1")
+		tnTest.read_until("Asterisk Call Manager/" + asteriskAuth[6])
 		tnTest.write("Action: Login\nUsername: " + asteriskAuth[4] + "\nSecret: " + asteriskAuth[5] + "\n\n")
 
 		#Wait for fully booted
@@ -1231,13 +1240,14 @@ def mainloop():
 		- the phone number is registered with SalesForce (account or contact)
 	If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information, such as the duration and disposition, if configured.
 	'''
+	global asteriskAuth
 	while True:
 		if (astValid and sfValid):
 			logging.info("Connecting to Asterisk..")
 			global lastAPIconnection
 			# Initialise Telnet connection and log in.
 			tn_cdr = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
-			tn_cdr.read_until("Asterisk Call Manager/1.1")
+			tn_cdr.read_until("Asterisk Call Manager/" + asteriskAuth[6])
 			tn_cdr.write("Action: Login\nUsername: " + asteriskAuth[4] + "\nSecret: " + asteriskAuth[5] + "\n\n")
 
 			#Wait for fully booted
@@ -1491,7 +1501,7 @@ if __name__ == "__main__":
 		loggingEnabled = False
 		salesforceAuth = ('', '', '', '')
 		smtpAuth = ('', '', '', '')
-		asteriskAuth = ('', '', '', '', '', '')
+		asteriskAuth = ('', '', '', '', '', '', '')
 		sfValid = False
 		smtpValid = False
 		astValid = False
