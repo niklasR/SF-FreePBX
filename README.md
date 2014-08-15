@@ -11,7 +11,7 @@ SF-FreePBX runs in environments with:
  * SalesForce with API access enabled (Enterprise/Performance/Unlimited or Professional with Add-On)
 
 The machine running SF-FreePBX requires
- * Python 2.7+
+ * Python 2.7+ with pytz
  * telnet access to the PBX server on the port defined in the AMI configuration in Asterisk (default is 5038)
 
 Names for the extensions need to be saved in the format `FirstName LastName` in FreePBX, and accordingly in SalesForce.
@@ -35,7 +35,10 @@ You need a user with the permissions to create tasks (i.e. log calls/activity) o
 ### SF-FreePBX
 
 SF-FreePBX requires Python, [Simple-Salesforce](https://github.com/neworganizing/simple-salesforce/) and [EncryptedPickle for Python](https://github.com/vingd/encrypted-pickle-python).
-Simple Salesforce can be installed with pip: `pip install simple-salesforce`, and so can EncryptedPickle: `pip install EncryptedPickle`.
+Simple Salesforce, EncryptedPickle and pytz (if not already existent) can be installed with pip:
+`pip install simple-salesforce`
+`pip install EncryptedPickle`
+`pip install pytz`
 
 ## Set-Up & Run
 
