@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint, smtplib
+import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint, smtplib, getpass
 import BaseHTTPServer, ssl 
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
@@ -1447,8 +1447,7 @@ if __name__ == "__main__":
 			port = arg
 		elif opt in ("-f", "--configfile"):
 			configfile = arg + '.epk'
-		elif opt in ("-s", "--secret"):
-			filesecret = arg
+			filesecret = getpass.getpass("Enter password for " + arg)
 	
 	exitnow = False
 	try:
