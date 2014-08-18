@@ -12,7 +12,7 @@ class server(threading.Thread):
     def __init__(self,):
         threading.Thread.__init__(self)
     def run(self):
-    	# if certificate exists, start as SSL
+    	# if certificate called server.pem exists, start as SSL
         if os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem')):
         	httpd = BaseHTTPServer.HTTPServer(("localhost", port), MyHandler)
         	logging.info("SERVER started with SSL. Connect with https://<localhost>:" + str(port))
@@ -95,7 +95,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					logging.info("HTTP Authorised.")
 					authorised = True
 
-		if authorised == True:
+		if authorised:
 
 			# Analyse HTTP GET content
 			qs = {}
@@ -242,7 +242,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					logging.info("HTTP Authorised.")
 					authorised = True
 
-		if authorised == True:
+		if authorised:
 			# Analyse HTTP Path
 			qs = {}
 			path = self.path
@@ -541,7 +541,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						<div class="panel-body">
 						<form role="form" action="/" autocomplete="off" method="POST" >
 						<div class="form-group">
-						<select class="form-control" name="emailEnabled" multiple="multiple" style="height:300px;width=90%">'"""
+						<select class="form-control" name="emailEnabled" multiple="multiple" style="height:300px;width=90%">"""
 				for UserId in emailUsers:
 					html += '<option value="' + UserId
 					if emailUsers[UserId]:
@@ -565,7 +565,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						<div class="panel-body">
 						<form role="form" action="/" autocomplete="off" method="POST" >
 						<div class="form-group">
-						<select class="form-control" name="voicemailEnabled" multiple="multiple" style="height:300px;width=90%">'"""
+						<select class="form-control" name="voicemailEnabled" multiple="multiple" style="height:300px;width=90%">"""
 				for UserId in voicemailUsers:
 					html += '<option value="' + UserId
 					if voicemailUsers[UserId]:
@@ -589,7 +589,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 						<div class="panel-body">
 						<form role="form" action="/" autocomplete="off" method="POST" >
 						<div class="form-group">
-						<select class="form-control" name="unansweredUsers" multiple="multiple" style="height:300px;width=90%">'"""
+						<select class="form-control" name="unansweredUsers" multiple="multiple" style="height:300px;width=90%">"""
 				for UserId in unansweredUsers:
 					html += '<option value="' + UserId
 					if unansweredUsers[UserId]:
@@ -657,12 +657,13 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 				</div>
 				<div class="form-group">
 				<button type="submit" class="btn btn-warning" style="margin:5px;">Load</button>
+				</div>
 				</form>
-			</div></div></div>
+			</div></div>
 			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">Asterisk/FreePBX Config<br/>&nbsp;</div>
 				<div class="panel-body">
-				<form class="form-horizontal" role=" action="/" method="POST" >
+				<form class="form-horizontal" action="/" method="POST" >
 				  <div class="form-group" style="margin-bottom:10px">
 				    <label for="asterisk_host" class="col-sm-6 control-label">Host</label>
 				    <div class="col-sm-6">
@@ -715,7 +716,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">SalesForce Config<br/>&nbsp;</div>
 				<div class="panel-body">
-				<form class="form-horizontal" role=" action="/" method="POST" >
+				<form class="form-horizontal" action="/" method="POST" >
 				  <div class="form-group">
 				    <label for="sf_instance" class="col-sm-6 control-label">Instance</label>
 				    <div class="col-sm-6">
@@ -750,7 +751,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 			<div class="panel panel-default" style="height:450px;float:left;width:250px;overflow:hidden;margin:5px;">
 				<div class="panel-heading">Email Config<br/>&nbsp;</div>
 				<div class="panel-body">
-				<form class="form-horizontal" role=" action="/" method="POST" >
+				<form class="form-horizontal" action="/" method="POST" >
 				  <div class="form-group">
 				    <label for="email_server" class="col-sm-6 control-label">Host</label>
 				    <div class="col-sm-6">
