@@ -908,7 +908,6 @@ def getActiveUsers():
 	activeUsers = {}
 	query = "SELECT Name, Id, Username FROM User WHERE IsActive = true"
 	result = sf.query_all(query)["records"]
-	lastAPIconnection = time.time()
 	for user in result:
 		activeUsers[user['Id']] = {}
 		activeUsers[user['Id']]['Name'] = user['Name']
@@ -930,7 +929,6 @@ def getUserId(fullName):
 	'''
 	query = "SELECT Id FROM User WHERE Name LIKE '" + fullName + "'"
 	result = sf.query_all(query)["records"]
-	lastAPIconnection = time.time()
 	if len(result) == 1:
 		return result[0]['Id'] # return Id of first result
 	else:
@@ -975,7 +973,6 @@ def getNumberOfContacts(phonenumber):
 	term = getNumberTerm(phonenumber)
 
 	results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
-	lastAPIconnection = time.time()
 	return len(results)
 
 def getNumberOfAccounts(phonenumber):
@@ -985,7 +982,6 @@ def getNumberOfAccounts(phonenumber):
 	term = getNumberTerm(phonenumber)
 
 	results = sf.query_all("SELECT Id FROM Account WHERE Phone LIKE '" + term + "'")["records"]
-	lastAPIconnection = time.time()
 	if (len(results) > 0):
 		return len(results)
 	else: # search contacts for phone numbers and count associated accounts
@@ -994,7 +990,6 @@ def getNumberOfAccounts(phonenumber):
 		
 		# Search contacts for phones
 		results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
-		lastAPIconnection = time.time()
 		for contact in results:
 			uniqueAccounts.add(contact['AccountId'])
 
@@ -1007,20 +1002,17 @@ def getAccountId(phonenumber):
 	term = getNumberTerm(phonenumber)
 	#Query database for accounts
 	results = sf.query_all("SELECT Id FROM Account WHERE Phone LIKE '" + term + "'")["records"]
-	lastAPIconnection = time.time()
 	if (len(results) == 1): # return ID of only match
 		return results[0]['Id']
 	else:
 		try:
 			# No Account found, looking for contacts
 			results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "'")["records"]
-			lastAPIconnection = time.time()
 			if (len(results) == 1): # return ID of only match
 				return results[0]['AccountId']
 			elif (len(results) == 0):
 				# No Contact found; looking for mobiles
 				results = sf.query_all("SELECT AccountId FROM Contact WHERE MobilePhone LIKE '" + term + "'")["records"]
-				lastAPIconnection = time.time()
 				if (len(results) == 1): # return ID of only match
 					return results[0]['AccountId']
 				else: # if multiple results, check if they belong to the same account
@@ -1048,7 +1040,6 @@ def getContactId(phonenumber):
 	term = getNumberTerm(phonenumber)
 	#Query database for accounts
 	results = sf.query_all("SELECT Id FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
-	lastAPIconnection = time.time()
 	if (len(results) == 1): # return ID of only match
 		return results[0]['Id']
 	return None
@@ -1073,7 +1064,6 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 			'Summary__c':summary,
 			'ActivityDate':time.strftime('%Y-%m-%d')
 			})
-		lastAPIconnection = time.time()
 		logging.info("\tCall logged. Task Id: " + str(task['id']) + ".")
 		if emailEnabled and emailUsers[userId]:
 			try:
@@ -1245,7 +1235,6 @@ def mainloop():
 	while True:
 		if (astValid and sfValid):
 			logging.info("Connecting to Asterisk..")
-			global lastAPIconnection
 			# Initialise Telnet connection and log in.
 			tn_cdr = telnetlib.Telnet(asteriskAuth[0], asteriskAuth[1])
 			tn_cdr.read_until("Asterisk Call Manager/" + asteriskAuth[6])
@@ -1396,13 +1385,6 @@ def mainloop():
 										logging.info("\tLogging not enabled for this extension.")
 								else:
 									logging.info("\t" + str(getEventFieldValue('DestinationContext', event)))
-
-					# if last API call to SF older than 9 minutes make new API call to avoid session timeout
-					if ((time.time()-(lastAPIconnection)) > (60*9)):
-						logging.info("Making dummy API call to avoid SF session timeout...")
-						sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
-						lastAPIconnection = time.time()
-						logging.info("API call made.")
 					
 					time.sleep(5)
 				else:
@@ -1412,7 +1394,6 @@ def mainloop():
 
 ### START PROGRAM ###
 
-lastAPIconnection = time.time()
 asteriskUpdated = False
 sf = None
 
