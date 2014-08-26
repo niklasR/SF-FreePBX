@@ -1446,7 +1446,7 @@ if __name__ == "__main__":
 		elif opt in ("-p", "--port"):
 			port = arg
 		elif opt in ("-f", "--configfile"):
-			configfile = arg + '.epk'
+			configfile = arg
 			filesecret = getpass.getpass("Enter password for " + arg)
 	
 	exitnow = False
