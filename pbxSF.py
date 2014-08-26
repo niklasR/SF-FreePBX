@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint, smtplib, getpass
+import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint, smtplib, getpass, errno
 import BaseHTTPServer, ssl 
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
@@ -1497,6 +1497,12 @@ if __name__ == "__main__":
 
 	# Start new Threads
 	serverThread.start()
-	mainloop()
+	try:
+		mainloop()
+	except socket.error as e:
+		if e.errno != errno.ECONNRESET:
+			raise # unknown error
+		pass # known error. potentially bug in urllib2/threading as described in https://web.archive.org/web/20131112225842/http://www.itmaybeahack.com/homepage/iblog/architecture/C551260341/E20081031204203/index.html
+
 else:
 	print "Please start program directly to have it work correctly."
