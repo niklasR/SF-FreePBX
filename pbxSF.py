@@ -1437,17 +1437,17 @@ if __name__ == "__main__":
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],"hp:f:s:",["help","port=","configfile=","secret="])
 	except getopt.GetoptError:
-		print "test.py -p <port> -f <configfile> -s <secret>"
+		print "test.py -p <port> -f <configfile>"
 		sys.exit(2)
 	for opt, arg in opts:
 		if (opt == '-h' or opt == '--help'):
-			print "test.py -p <port> -f <configfile> -s <secret>"
+			print "test.py -p <port> -f <configfile>"
 			sys.exit()
 		elif opt in ("-p", "--port"):
 			port = arg
 		elif opt in ("-f", "--configfile"):
 			configfile = arg
-			filesecret = getpass.getpass("Enter password for " + arg)
+			filesecret = getpass.getpass("Enter password for " + arg + ": ")
 	
 	exitnow = False
 	try:
