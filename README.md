@@ -52,7 +52,7 @@ If you are not loading a previously saved config, you will be asked to specify a
 
 Your salesforce instance can be taken from the url when you are logged-in to . If it begins with `https://na1.salesforce.com`, for example, your instance would be `na1.salesforce.com`.
 
-To load a previously saved config, you can use `-f filename -s passphrase`.
+To load a previously saved config, you can use `-f filename`. You will be prompted for the passphrase.
 Take a look at the log to see if everything is running correctly.
 
 ### SSL
