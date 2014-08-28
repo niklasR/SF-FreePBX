@@ -16,7 +16,7 @@ class server(threading.Thread):
         if os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem')):
         	httpd = BaseHTTPServer.HTTPServer(("localhost", port), MyHandler)
         	logging.info("SERVER started with SSL. Connect with https://<localhost>:" + str(port))
-        	httpd.socket = ssl.wrap_socket (httpd.socket, certfile=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem'), server_side=True) # certfile needs to include private key and certificate
+        	httpd.socket = ssl.wrap_socket(httpd.socket, certfile=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'server.pem'), server_side=True) # certfile needs to include private key and certificate
         else:
         	httpd = SocketServer.TCPServer(("", port), MyHandler)
         	logging.info("SERVER started. Connect with http://<localhost>:" + str(port))
