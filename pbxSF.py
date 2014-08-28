@@ -1,5 +1,27 @@
 #! /usr/bin/env python
-import sys, getopt, telnetlib, re, socket, time, datetime, pytz, threading, Queue, SimpleHTTPServer, urlparse, SocketServer, pickle, os, ssl, base64, logging, pprint, smtplib, getpass, errno
+import sys
+import getopt
+import telnetlib
+import re
+import socket
+import time
+import datetime
+import pytz
+import threading
+import Queue
+import SimpleHTTPServer
+import urlparse
+import SocketServer
+import pickle
+import os
+import ssl
+import base64
+import logging
+import pprint
+import smtplib
+import getpass
+import errno
+
 import BaseHTTPServer, ssl 
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
@@ -288,7 +310,7 @@ class MyHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 					if userId not in voicemailUsers:
 						voicemailUsers[userId] = True
 					if userId not in unansweredUsers:
-						unansweredUsers[userId] = True
+					    unansweredUsers[userId] = True
 
 				# Remove old IDs
 				removedExts = set(whitelistLogging) - set(qs['whitelist'])
