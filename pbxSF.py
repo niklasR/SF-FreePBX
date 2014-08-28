@@ -905,6 +905,7 @@ def getActiveUsers():
 	'''
 	Returns list of all active SalesForce Users
 	'''
+	global lastAPIconnection
 	activeUsers = {}
 	query = "SELECT Name, Id, Username FROM User WHERE IsActive = true"
 	result = sf.query_all(query)["records"]
@@ -928,6 +929,7 @@ def getUserId(fullName):
 	'''
 	Returns the salesforce ID of the user with the matching name.
 	'''
+	global lastAPIconnection
 	query = "SELECT Id FROM User WHERE Name LIKE '" + fullName + "'"
 	result = sf.query_all(query)["records"]
 	lastAPIconnection = time.time()
@@ -971,7 +973,8 @@ def getNumberTerm(phonenumber):
 def getNumberOfContacts(phonenumber):
 	'''
 	Returns the number of salesforce contacts associated with the phone number
-	'''
+	'''lastAPIconnection
+	global 
 	term = getNumberTerm(phonenumber)
 
 	results = sf.query_all("SELECT AccountId FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
@@ -982,6 +985,7 @@ def getNumberOfAccounts(phonenumber):
 	'''
 	Returns the number of salesforce contacts associated with the phone number
 	'''
+	global lastAPIconnection
 	term = getNumberTerm(phonenumber)
 
 	results = sf.query_all("SELECT Id FROM Account WHERE Phone LIKE '" + term + "'")["records"]
@@ -1004,6 +1008,7 @@ def getAccountId(phonenumber):
 	'''
 	Returns the Account ID of the salesforce account associated with the phone number
 	'''
+	global lastAPIconnection
 	term = getNumberTerm(phonenumber)
 	#Query database for accounts
 	results = sf.query_all("SELECT Id FROM Account WHERE Phone LIKE '" + term + "'")["records"]
@@ -1045,6 +1050,7 @@ def getContactId(phonenumber):
 	'''
 	Returns the Contact ID of the salesforce contact associated with the phone number
 	'''
+	global lastAPIconnection
 	term = getNumberTerm(phonenumber)
 	#Query database for accounts
 	results = sf.query_all("SELECT Id FROM Contact WHERE Phone LIKE '" + term + "' OR MobilePhone LIKE '" + term + "'")["records"]
@@ -1059,6 +1065,7 @@ def createTask(accountId, summary, userId, subject='Call', contactId=None):
 	'''
 	global smtpAuth
 	global emailEnabled
+	global lastAPIconnection
 	if loggingEnabled:
 		task = sf.Task.create({
 			'Type':'Called',
