@@ -1436,6 +1436,7 @@ if __name__ == "__main__":
 	global smtpAuth
 	global smtpValid
 	global emailEnabled
+	global lastAPIconnection
 
 	try:
 		opts, args = getopt.getopt(sys.argv[1:],"hp:f:s:",["help","port=","configfile=","secret="])
@@ -1488,6 +1489,7 @@ if __name__ == "__main__":
 		emailUsers = data[11]
 		voicemailUsers = data[12]
 		unansweredUsers = data[13]
+		lastAPIconnection = 0.0
 
 		updateSF(salesforceAuth)
 
