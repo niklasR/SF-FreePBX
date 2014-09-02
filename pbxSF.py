@@ -15,7 +15,6 @@ import smtplib
 import getpass
 
 from flask import Flask, render_template, request, redirect
-from multiprocessing import Process
 from simple_salesforce import Salesforce
 from encryptedpickle import encryptedpickle
 from email.mime.text import MIMEText
