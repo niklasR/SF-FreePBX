@@ -43,7 +43,8 @@ class CommunicatorThread(threading.Thread):
 		global voicemailUsers
 		global unansweredUsers
 		global lastAPIconnection
-		while True:
+		global breakCommunicatorThread
+		while not breakCommunicatorThread:
 			if (astValid and sfValid):
 				logging.info("Connecting to Asterisk..")
 				global lastAPIconnection
@@ -56,7 +57,7 @@ class CommunicatorThread(threading.Thread):
 				tn_cdr.read_until("Status: Fully Booted")
 				logging.info("AMI connection established, starting loop")
 				# Infinite loop for continuous AMI communication
-				while True:
+				while not breakCommunicatorThread:
 					global asteriskUpdated
 					if asteriskUpdated:
 						asteriskUpdated = False
@@ -196,7 +197,7 @@ class CommunicatorThread(threading.Thread):
 									else:
 										logging.info("\t" + str(getEventFieldValue('DestinationContext', event)))
 						# if last API call to SF older than 9 minutes make new API call to avoid session timeout
-						if ((time.time()-(lastAPIconnection)) > (60*9)):
+						if ((time.time()-(lastAPIconnection)) > (60*9)) and (sf != None):
 							logging.info("Making dummy API call to avoid SF session timeout...")
 							sf.User.deleted(datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=2), datetime.datetime.now(pytz.UTC))
 							lastAPIconnection = time.time()
@@ -261,6 +262,7 @@ def create_app():
 		global voicemailUsers
 		global unansweredUsers
 		global sf
+		global breakCommunicatorThread
 
 		with dataLock:
 			# Do your stuff with commonDataStruct Here
@@ -344,6 +346,7 @@ def create_app():
 		showMessage = set()
 
 		lastAPIconnection = 0.0
+		breakCommunicatorThread = False
 
 	# Initiate
 	initialiseProgram()
