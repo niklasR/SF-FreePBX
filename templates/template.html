@@ -29,11 +29,11 @@
                     <select class="form-control" name="whitelist" multiple="multiple" style="height:300px;width=90%">
                     {% for extension in extensions %}
                         {% if extension[1] in activeUsersNames %}
-                            <option value="{{ extension[0]}}"
+                            <option value="{{ extension[0] }}"
                             {% if extension[0] in whitelistLogging %}
                                 selected="selected"
                             {% endif %}
-                            >{{ extension[0] }}: {{extension[1]}}</option>
+                            >{{ extension[0] }}: {{ extension[1] }}</option>
                         {% endif %}
                     {% endfor %}
                     </select><br />
@@ -49,13 +49,13 @@
                 <div class="panel-body">
                     <form role="form" action="/" autocomplete="off" method="POST" >
                         <div class="form-group">
-                            <select class="form-control" name="{{ sharedUser}}" multiple="multiple" style="height:300px;width=90%">
+                            <select class="form-control" name="{{ sharedUser }}" multiple="multiple" style="height:300px;width=90%">
                             {% for extension in extensions %}
-                                <option value="{{ extension[0]}}"
+                                <option value="{{ extension[0] }}"
                                 {% if extension[0] in sharedUsers[sharedUser] %}
                                     selected="selected"
                                 {% endif %}
-                                > {{ extension[0] }}: {{ extension[1]}}</option>
+                                > {{ extension[0] }}: {{ extension[1] }}</option>
                             {% endfor %}
                             </select><br />
                             <button type="submit" class="btn btn-primary" style="margin:5px;">Update</button>
@@ -73,7 +73,7 @@
                     <div class="form-group">
                         <select class="form-control" name="emailEnabled" multiple="multiple" style="height:300px;width=90%">"""
                         {% for userId in emailUsers %}
-                            <option value="{{UserId}}"
+                            <option value="{{ UserId }}"
                             {% if emailUsers[userId] %}
                                 selected="selected"
                             {% endif %}
@@ -119,7 +119,7 @@
                 <div class="form-group">
                 <select class="form-control" name="unansweredUsers" multiple="multiple" style="height:300px;width=90%">"""
                 {% for userId in unansweredUsers %}
-                    <option value="{{userId}}"
+                    <option value="{{ userId }}"
                     {% if unansweredUsers[userId] %}
                     selected="selected"
                     {% endif %}
