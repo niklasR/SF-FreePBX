@@ -409,11 +409,27 @@ def serveWebRequest():
 		if 'clear' in qs:
 			if qs['clear'][0] == 'active':
 				whitelistLogging = tuple()
-				emailUsersTemp = {} # new emailUsers
+				
+				# Repopulate dicts with sharedUsers only as they don't get cleared with this
+				emailUsersTemp = {}
+				unansweredUsersTemp = {}
+				voicemailUsersTemp = {}
+
 				for userId in emailUsers:
 					if userId in sharedUsers:
 						emailUsersTemp[userId] = emailUsers[userId]
 				emailUsers = emailUsersTemp
+
+				for userId in voicemailUsers:
+					if userId in sharedUsers:
+						voicemailUsersTemp[userId] = voicemailUsers[userId]
+				voicemailUsers = voicemailUsersTemp
+
+				for userId in unansweredUsers:
+					if userId in sharedUsers:
+						unansweredUsersTemp[userId] = unansweredUsers[userId]
+				unansweredUsers = unansweredUsersTemp
+
 
 			elif qs['clear'][0] == 'email':
 				for userId in emailUsers:
