@@ -33,7 +33,8 @@ class CommunicatorThread(threading.Thread):
 		Every 5 seconds, it checks if an event has been detected, and if so it checks whether
 			- the call was inbound or outbound
 			- the user is on a shared SalesForce account, and if not
-				- the user's extension is whitelisted (marked 'active' in the webinterface)
+				- the user's extension is whitelisted 
+(marked 'active' in the webinterface)
 			- the phone number is registered with SalesForce (account or contact)
 		If these tests validate, it logs the call in SalesForce as Activity (or 'Task') with relevant information, such as the duration and disposition, if configured.
 		'''
@@ -680,7 +681,8 @@ def serveWebRequest():
 		asteriskAuth = asteriskAuth,
 		salesforceAuth = salesforceAuth,
 		smtpAuth = smtpAuth,
-		emailEnabled = emailEnabled
+		emailEnabled = emailEnabled,
+		whitelistLogging = whitelistLogging
 		)
 
 	showMessage = set()
